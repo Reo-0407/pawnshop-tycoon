@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전당포 타이쿤</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="top" hidden>
+    <div><b id="nick"></b> · <span id="day"></span>일차</div>
+    <div>💰 <span id="cash"></span></div>
+    <div class="small">총 재산 <span id="worth"></span></div>
+    <button id="btnBoard" class="mini">🏆</button>
+  </header>
+
+  <!-- 시작 화면 -->
+  <section id="screen-title" class="screen">
+    <h1>🏪 전당포 타이쿤</h1>
+    <p>물건을 싸게 사서 비싸게 파세요!<br>가품을 조심하고, 흥정을 잘하면 부자가 돼요.</p>
+    <input id="nickInput" maxlength="8" placeholder="닉네임 (최대 8글자)" autocomplete="off">
+    <button id="btnStart" class="big">시작하기</button>
+    <button id="btnTitleBoard" class="ghost">🏆 순위 보기</button>
+  </section>
+
+  <!-- 손님 화면 -->
+  <section id="screen-shop" class="screen" hidden>
+    <div class="progress" id="progress"></div>
+    <div id="customerCard" class="card">
+      <div class="who"><div id="who" class="avatar"></div><div id="bubble" class="bubble"></div></div>
+      <div id="itemCard" class="itemcard"></div>
+      <div id="info" class="info"></div>
+      <div id="negotiate">
+        <div class="priceRow">
+          <button class="mini" data-adj="-0.1">-10%</button>
+          <input id="price" type="number" inputmode="numeric" min="0" step="100">
+          <button class="mini" data-adj="0.1">+10%</button>
+        </div>
+        <div class="row">
+          <button id="btnOffer" class="big"></button>
+          <button id="btnDecline" class="ghost">거절하기</button>
+        </div>
+        <button id="btnAccept" class="big accent" hidden></button>
+      </div>
+      <div class="row"><button id="btnNext" class="big" hidden>다음 손님</button></div>
+    </div>
+    <div id="shelfBox">
+      <div class="small">진열대 <span id="shelfCount"></span></div>
+      <div id="shelf"></div>
+    </div>
+  </section>
+
+  <!-- 하루 끝 / 상점 -->
+  <section id="screen-night" class="screen" hidden>
+    <h2 id="nightTitle"></h2>
+    <div id="nightSummary" class="card"></div>
+    <div id="upgrades"></div>
+    <button id="btnNextDay" class="big">다음 날 시작 ▶</button>
+  </section>
+
+  <section id="screen-over" class="screen" hidden>
+    <h2>😭 파산했어요</h2>
+    <p id="overMsg"></p>
+    <button id="btnRestart" class="big">다시 시작</button>
+  </section>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modalbox">
+    <h3>🏆 총 재산 순위</h3>
+    <div id="board">불러오는 중...</div>
+    <button id="btnCloseBoard" class="big">닫기</button>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
