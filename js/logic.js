@@ -118,21 +118,25 @@ export function fixCustomer(rng, state, c) {
 }
 
 // 흥정: 결과 {status:'deal'|'counter'|'leave', price?, msg}
+// 역제안은 한 방향으로만 움직여요: 사는 손님은 값을 올리기만, 파는 손님은 내리기만 해요.
 export function haggle(c, offer) {
+  c.rounds = (c.rounds || 0) + 1;
   if (c.kind === 'sell') { // 플레이어가 사는 쪽
     if (offer >= c.min) return { status: 'deal', price: offer, msg: '좋아요! 그 가격에 팔게요.' };
     c.patience -= offer < c.min * 0.6 ? 2 : 1;
     if (c.patience <= 0) return { status: 'leave', msg: '너무 박하네요! 안 팔아요!' };
-    const counter = round100(c.min * (1 + 0.12 * c.patience));
-    const cp = Math.max(counter, round100(c.min)); c.ask = cp;
+    const floor = round100(c.min);
+    const cp = Math.min(c.ask, Math.max(floor, round100(c.min * (1.2 - 0.08 * c.rounds)))); // 현재 요구가보다 낮게, 최저가 아래로는 안 내려감
+    c.ask = cp;
     return { status: 'counter', price: cp, msg: `음... ${cp.toLocaleString()}원이면 팔게요.` };
   }
   // 플레이어가 파는 쪽
   if (offer <= c.max) return { status: 'deal', price: offer, msg: '좋아요! 살게요.' };
   c.patience -= offer > c.max * 1.4 ? 2 : 1;
   if (c.patience <= 0) return { status: 'leave', msg: '너무 비싸요! 다른 데 갈래요!' };
-  const counter = round100(c.max * (1 - 0.04 * (3 - c.patience))); c.offer = counter;
-  return { status: 'counter', price: counter, msg: `음... ${counter.toLocaleString()}원이면 살게요.` };
+  const cp = Math.min(c.max, Math.max(c.offer, round100(c.max * Math.min(1, 0.9 + 0.05 * c.rounds)))); // 현재 제안가보다 높게, 최대치를 넘지 않게
+  c.offer = cp;
+  return { status: 'counter', price: cp, msg: `음... ${cp.toLocaleString()}원이면 살게요.` };
 }
 
 export function junkValue(it) { return it.fake ? round100(it.base * 0.05) : round100(trueValue(it) * 0.5); }

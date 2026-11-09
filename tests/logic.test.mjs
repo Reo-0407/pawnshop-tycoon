@@ -87,3 +87,23 @@ console.log('수집가 테스트 통과');
   assert.ok(right > 920, `3단계 판정 정확도 ${right}/1000`);
 }
 console.log('마케팅 도우미 테스트 통과');
+
+// ---- 흥정: 역제안은 한 방향으로만 (버그 수정: 사는 손님이 30,000 -> 28,500 으로 내려가던 문제) ----
+{
+  for (let n = 0; n < 500; n++) {
+    const q = newState('흥정'); L.rollDay(rng, q);
+    // 사는 손님(내가 파는 쪽): 계속 너무 비싸게 불러도 손님 제안가는 내려가면 안 된다
+    const max = 20000 + Math.floor(rng() * 80000), b = { kind: 'buy', max, offer: Math.round(max * (0.55 + rng() * 0.2) / 100) * 100, patience: 3 };
+    let prev = b.offer;
+    for (let r = 0; r < 4; r++) { const res = haggle(b, max * (1.1 + rng())); if (res.status !== 'counter') break; assert.ok(res.price >= prev, `사는 손님 제안가가 내려감 ${prev} -> ${res.price}`); assert.ok(res.price <= max); prev = res.price; }
+    // 파는 손님(내가 사는 쪽): 계속 낮게 불러도 손님 요구가는 올라가면 안 되고 최저가 아래로도 안 내려간다
+    const min = 5000 + Math.floor(rng() * 50000), sl = { kind: 'sell', min, ask: Math.round(min * (1.18 + rng() * 0.5) / 100) * 100, patience: 3 };
+    let pa = sl.ask;
+    for (let r = 0; r < 4; r++) { const res = haggle(sl, min * 0.7); if (res.status !== 'counter') break; assert.ok(res.price <= pa, `파는 손님 요구가가 올라감 ${pa} -> ${res.price}`); assert.ok(res.price >= Math.round(min / 100) * 100); pa = res.price; }
+  }
+  // 사용자가 겪은 상황: 손님 제안가 30,000 -> 내가 35,000 -> 그다음 역제안이 30,000 아래로 내려가면 안 된다
+  const k = { kind: 'buy', max: 31300, offer: 30000, patience: 3 };
+  const r1 = haggle(k, 35000); assert.equal(r1.status, 'counter'); assert.ok(r1.price >= 30000);
+  const r2 = haggle(k, 35000); if (r2.status === 'counter') assert.ok(r2.price >= r1.price);
+}
+console.log('흥정 방향 테스트 통과');
