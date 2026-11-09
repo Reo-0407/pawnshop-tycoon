@@ -22,3 +22,19 @@ s.cash = 1000; assert.equal(endDay(s).bankrupt, true);
 s.cash = 50000; assert.equal(buyUpgrade(s, 'slots').ok, true); assert.equal(s.cash, 20000);
 assert.equal(buyUpgrade(s, 'slots').ok, false);
 console.log('모든 테스트 통과');
+
+// ---- 시세·감정·제안가 ----
+{
+  const { rollDay, appraise, trendMult, roughRange, makeCustomer, newState: ns } = await import('../js/logic.js');
+  const t = ns('시세'); rollDay(rng, t);
+  assert.notEqual(t.trend.up, t.trend.down); assert.equal(t.loupeLeft, 3);
+  assert.equal(trendMult(t, { cat: t.trend.up }), 1.3); assert.equal(trendMult(t, { cat: t.trend.down }), 0.8);
+  const c = { appraised: false }; assert.equal(appraise(t, c), true); assert.equal(t.loupeLeft, 2); assert.equal(appraise(t, c), false);
+  t.loupeLeft = 0; assert.equal(appraise(t, { appraised: false }), false);
+  const it = makeItem(rng, t); const rr = roughRange(it); assert.ok(rr.lo < it.hint.lo + 1 && rr.hi > it.hint.hi - 1);
+  t.shelf.push(makeItem(rng, t, 2)); t.shelf[0].fake = false;
+  let buy = null; for (let i = 0; i < 200 && !buy; i++) { const x = makeCustomer(rng, t); if (x.kind === 'buy') buy = x; }
+  assert.ok(buy && buy.offer <= buy.max);
+  const r = haggle({ ...buy, patience: 3 }, buy.max * 3); assert.equal(r.status, 'counter');
+}
+console.log('시세·감정 테스트 통과');

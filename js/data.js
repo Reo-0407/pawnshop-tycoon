@@ -26,15 +26,27 @@ const RAW = [
   ['scroll', '고대 두루마리', '📜', 3, 1800000], ['trophy', '황금 트로피', '🏆', 3, 2200000],
   ['mask', '왕의 가면', '🎭', 3, 4000000], ['lamp', '요술 램프', '🪔', 3, 6000000],
 ];
-export const ITEMS = RAW.map(([id, name, emoji, tier, base]) => ({ id, name, emoji, tier, base }));
+// 분류: 오늘의 시세(분류별 오름/내림)에 쓰여요
+const CAT_OF = {
+  시계: ['clock', 'watchcheap', 'watch'],
+  전자기기: ['radio', 'camera', 'game', 'phone', 'laptop', 'headphone', 'tv', 'toy'],
+  악기: ['guitar', 'violin'],
+  보석: ['ring', 'necklace', 'diamond', 'goldbar', 'crown'],
+  골동품: ['vase', 'sword', 'painting', 'telescope', 'map', 'scroll', 'key', 'book', 'orb', 'mask', 'lamp', 'trophy', 'egg'],
+  생활용품: ['sock', 'can', 'umbrella', 'shoe', 'bottle', 'comic', 'cup', 'bike', 'bag'],
+};
+export const CATS = Object.keys(CAT_OF);
+export const ITEMS = RAW.map(([id, name, emoji, tier, base]) => ({
+  id, name, emoji, tier, base, cat: CATS.find((c) => CAT_OF[c].includes(id)),
+}));
 
 // 손님: 동물 캐릭터
 export const CUSTOMERS = [
-  ['cat', '고양이 나비', '🐱'], ['dog', '강아지 멍멍', '🐶'], ['rabbit', '토끼 토토', '🐰'],
-  ['bear', '곰돌이 곰곰', '🐻'], ['fox', '여우 여리', '🦊'], ['panda', '판다 판판', '🐼'],
-  ['frog', '개구리 개굴', '🐸'], ['lion', '사자 레오', '🦁'], ['owl', '부엉이 부부', '🦉'],
-  ['penguin', '펭귄 펭이', '🐧'],
-].map(([id, name, emoji]) => ({ id, name, emoji }));
+  ['cat', '고양이 나비', '🐱', '길냥이 탐정'], ['dog', '강아지 멍멍', '🐶', '동네 산책가'], ['rabbit', '토끼 토토', '🐰', '당근 상인'],
+  ['bear', '곰돌이 곰곰', '🐻', '캠핑 마니아'], ['fox', '여우 여리', '🦊', '눈치 빠른 상인'], ['panda', '판다 판판', '🐼', '느긋한 여행가'],
+  ['frog', '개구리 개굴', '🐸', '연못 수집가'], ['lion', '사자 레오', '🦁', '부자 사업가'], ['owl', '부엉 박사', '🦉', '부엉이 수집가'],
+  ['penguin', '펭귄 펭이', '🐧', '얼음나라 손님'],
+].map(([id, name, emoji, role]) => ({ id, name, emoji, role }));
 
 export const UPGRADES = {
   slots: { name: '진열대', desc: '진열할 수 있는 칸이 늘어요', levels: [4, 6, 8, 10, 12], costs: [30000, 60000, 120000, 250000] },
@@ -46,6 +58,7 @@ export const LOUPE = {
   spread: [0, 0.4, 0.25, 0.1],     // 시세 범위 ±
   accuracy: [0, 0.65, 0.82, 0.95], // 진품 판정 정확도
 };
+export const LOUPE_USES = (level) => 1 + 2 * level; // 하루 감정 횟수 (1단계 3회, 3단계 7회)
 export const START_CASH = 100000;
 export const CUSTOMERS_PER_DAY = 8;
 export const RENT = (interior) => 3000 + 2000 * (interior - 1);

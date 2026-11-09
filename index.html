@@ -2,21 +2,29 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#fff4dc">
 <title>전당포 타이쿤</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-<div id="app">
-  <header id="top" hidden>
-    <div><b id="nick"></b> · <span id="day"></span>일차</div>
-    <div>💰 <span id="cash"></span></div>
-    <div class="small">총 재산 <span id="worth"></span></div>
-    <button id="btnBoard" class="mini">🏆</button>
-  </header>
+<header id="top" hidden>
+  <div class="brand">🏪 <b id="nick"></b></div>
+  <div class="chips">
+    <span class="chip"><span id="day"></span>일차</span>
+    <span class="chip">손님 <span id="custNo"></span></span>
+    <span class="chip money">현금 <span id="cash"></span></span>
+    <span class="chip">돋보기 <span id="loupeLeft"></span></span>
+    <button id="btnShelf" class="chip btn">재고 <span id="shelfCount"></span></button>
+    <button id="btnBoard" class="chip btn ghostchip">🏆 순위</button>
+  </div>
+</header>
 
+<main id="app">
   <!-- 시작 화면 -->
-  <section id="screen-title" class="screen">
+  <section id="screen-title" class="screen narrow">
     <h1>🏪 전당포 타이쿤</h1>
     <p>물건을 싸게 사서 비싸게 파세요!<br>가품을 조심하고, 흥정을 잘하면 부자가 돼요.</p>
     <input id="nickInput" maxlength="8" placeholder="닉네임 (최대 8글자)" autocomplete="off">
@@ -24,47 +32,65 @@
     <button id="btnTitleBoard" class="ghost">🏆 순위 보기</button>
   </section>
 
-  <!-- 손님 화면 -->
+  <!-- 가게 화면: 장면 위에 오른쪽 상담 패널 -->
   <section id="screen-shop" class="screen" hidden>
-    <div class="progress" id="progress"></div>
-    <div id="customerCard" class="card">
-      <div class="who"><div id="who" class="avatar"></div><div id="bubble" class="bubble"></div></div>
-      <div id="itemCard" class="itemcard"></div>
-      <div id="info" class="info"></div>
-      <div id="negotiate">
-        <div class="priceRow">
-          <button class="mini" data-adj="-0.1">-10%</button>
-          <input id="price" type="number" inputmode="numeric" min="0" step="100">
-          <button class="mini" data-adj="0.1">+10%</button>
+    <div class="stage" id="stage">
+      <div id="customerSprite" class="customer"></div>
+      <div class="counter"><div class="top"></div></div>
+      <div id="tableItem" class="tableitem"></div>
+      <div id="priceTag" class="pricetag"></div>
+      <div id="bubble" class="bubble"><div id="bubbleWho" class="bwho"></div><div id="bubbleMsg"></div></div>
+      <div id="float" class="float"></div>
+      <div id="trend" class="trend"></div>
+
+      <aside class="panel" id="panel">
+        <div class="ptop"><span id="stateTag" class="state"></span><span id="moodTag" class="mood"></span></div>
+        <div class="who2"><div><b id="whoName"></b> <span id="whoRole" class="small"></span></div><div class="patience">인내심 <span id="dots"></span></div></div>
+
+        <div class="itemrow">
+          <div id="thumb" class="thumb"></div>
+          <div class="idesc">
+            <div id="iname" class="iname"></div>
+            <div id="itags" class="itags"></div>
+            <div id="irange" class="est"></div>
+            <div id="icost" class="small"></div>
+          </div>
         </div>
-        <div class="row">
-          <button id="btnOffer" class="big"></button>
-          <button id="btnDecline" class="ghost">거절하기</button>
+
+        <div class="offerline"><span id="offerLabel"></span><b id="offerVal"></b></div>
+
+        <div class="mybox" id="negotiate">
+          <div class="mine"><span id="askLabel"></span><div class="priceWrap"><input id="price" type="number" inputmode="numeric" min="0" step="100"><span>원</span></div></div>
+          <div class="steps" id="steps"></div>
+          <div class="steps mults" id="mults"></div>
+          <div id="margin" class="margin"></div>
         </div>
-        <button id="btnAccept" class="big accent" hidden></button>
-      </div>
-      <div class="row"><button id="btnNext" class="big" hidden>다음 손님</button></div>
-    </div>
-    <div id="shelfBox">
-      <div class="small">진열대 <span id="shelfCount"></span></div>
-      <div id="shelf"></div>
+
+        <div class="row2">
+          <button id="btnAppraise" class="soft"></button>
+          <button id="btnOffer" class="primary"></button>
+        </div>
+        <button id="btnDeal" class="soft wide"></button>
+        <button id="btnDecline" class="danger wide"></button>
+        <button id="btnNext" class="primary wide" hidden>다음 손님</button>
+      </aside>
     </div>
   </section>
 
   <!-- 하루 끝 / 상점 -->
-  <section id="screen-night" class="screen" hidden>
+  <section id="screen-night" class="screen narrow" hidden>
     <h2 id="nightTitle"></h2>
     <div id="nightSummary" class="card"></div>
     <div id="upgrades"></div>
     <button id="btnNextDay" class="big">다음 날 시작 ▶</button>
   </section>
 
-  <section id="screen-over" class="screen" hidden>
+  <section id="screen-over" class="screen narrow" hidden>
     <h2>😭 파산했어요</h2>
     <p id="overMsg"></p>
     <button id="btnRestart" class="big">다시 시작</button>
   </section>
-</div>
+</main>
 
 <div id="modal" class="modal" hidden>
   <div class="modalbox">
@@ -73,7 +99,14 @@
     <button id="btnCloseBoard" class="big">닫기</button>
   </div>
 </div>
+<div id="shelfModal" class="modal" hidden>
+  <div class="modalbox wide">
+    <h3>🗄️ 내 재고 <span id="shelfCount2" class="small"></span></h3>
+    <div id="shelf"></div>
+    <button id="btnCloseShelf" class="big">닫기</button>
+  </div>
+</div>
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/main.js?v=3"></script>
 </body>
 </html>

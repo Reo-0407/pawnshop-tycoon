@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, FAKE_CHANCE, LOUPE, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js';
+import { ITEMS, CUSTOMERS, CATS, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -9,12 +9,27 @@ export function newState(nick) {
   return {
     nick, day: 1, cash: START_CASH, shelf: [],
     up: { slots: 0, loupe: 0, interior: 0 }, // 각 업그레이드의 현재 단계(0부터)
+    trend: null, loupeLeft: 0,
     secret: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36),
   };
 }
 export const slotCount = (s) => UPGRADES.slots.levels[s.up.slots];
 export const loupeLevel = (s) => UPGRADES.loupe.levels[s.up.loupe];
 export const interiorLevel = (s) => UPGRADES.interior.levels[s.up.interior];
+
+// 하루를 시작할 때: 오늘의 시세(한 분류는 +30%, 한 분류는 -20%)와 감정 횟수 정하기
+export function rollDay(rng, s) {
+  const up = pick(rng, CATS); const down = pick(rng, CATS.filter((c) => c !== up));
+  s.trend = { up, down }; s.loupeLeft = LOUPE_USES(loupeLevel(s));
+}
+export const trendMult = (s, it) => (s.trend ? (it.cat === s.trend.up ? 1.3 : it.cat === s.trend.down ? 0.8 : 1) : 1);
+// 감정 전에 보이는 넓은 시세 범위
+export const roughRange = (it) => { const c = (it.hint.lo + it.hint.hi) / 2; return { lo: round100(c * 0.5), hi: round100(c * 1.7) }; };
+export function appraise(s, c) {
+  if (c.appraised || s.loupeLeft <= 0) return false;
+  s.loupeLeft -= 1; c.appraised = true; return true;
+}
+export const conditionLabel = (cond) => (cond >= 1.1 ? '상태 상' : cond >= 0.85 ? '상태 중' : '상태 하');
 
 export const trueValue = (it) => (it.fake ? 0 : Math.round(it.base * it.cond));
 export const netWorth = (s) => s.cash + s.shelf.reduce((a, it) => a + trueValue(it), 0);
@@ -34,7 +49,7 @@ export function makeItem(rng, state, tier = null) {
   const fake = rng() < FAKE_CHANCE[t];
   const it = { ...base, cond, fake };
   const L = loupeLevel(state);
-  const apparent = base.base * cond; // 진품이라면의 가치
+  const apparent = base.base * cond * trendMult(state, base); // 진품이라면의 오늘 가치
   const spread = LOUPE.spread[L];
   const center = apparent * (1 + rand(rng, -spread / 2, spread / 2));
   it.hint = {
@@ -50,11 +65,11 @@ export function makeCustomer(rng, state) {
   const interior = interiorLevel(state);
   if (genuine.length && rng() < 0.4) {
     const item = pick(rng, genuine);
-    const max = round100(trueValue(item) * rand(rng, 1.1, 1.6) * (1 + 0.05 * (interior - 1)));
-    return { kind: 'buy', who: c, item, max, patience: 3 };
+    const max = round100(trueValue(item) * trendMult(state, item) * rand(rng, 1.1, 1.6) * (1 + 0.05 * (interior - 1)));
+    return { kind: 'buy', who: c, item, max, offer: round100(max * rand(rng, 0.55, 0.75)), patience: 3 };
   }
   const item = makeItem(rng, state);
-  const believed = item.base * item.cond; // 손님은 진품인 줄 알고 있음
+  const believed = item.base * item.cond * trendMult(state, item); // 손님은 진품인 줄 알고 있음
   const min = round100(believed * rand(rng, 0.55, 0.85));
   const ask = round100(believed * rand(rng, 1.0, 1.4));
   return { kind: 'sell', who: c, item, min, ask: Math.max(ask, min), patience: 3 };
@@ -71,13 +86,14 @@ export function haggle(c, offer) {
     c.patience -= offer < c.min * 0.6 ? 2 : 1;
     if (c.patience <= 0) return { status: 'leave', msg: '너무 박하네요! 안 팔아요!' };
     const counter = round100(c.min * (1 + 0.12 * c.patience));
-    return { status: 'counter', price: Math.max(counter, round100(c.min)), msg: `음... ${Math.max(counter, round100(c.min)).toLocaleString()}원이면 팔게요.` };
+    const cp = Math.max(counter, round100(c.min)); c.ask = cp;
+    return { status: 'counter', price: cp, msg: `음... ${cp.toLocaleString()}원이면 팔게요.` };
   }
   // 플레이어가 파는 쪽
   if (offer <= c.max) return { status: 'deal', price: offer, msg: '좋아요! 살게요.' };
   c.patience -= offer > c.max * 1.4 ? 2 : 1;
   if (c.patience <= 0) return { status: 'leave', msg: '너무 비싸요! 다른 데 갈래요!' };
-  const counter = round100(c.max * (1 - 0.04 * (3 - c.patience)));
+  const counter = round100(c.max * (1 - 0.04 * (3 - c.patience))); c.offer = counter;
   return { status: 'counter', price: counter, msg: `음... ${counter.toLocaleString()}원이면 살게요.` };
 }
 
