@@ -32,9 +32,30 @@ console.log('모든 테스트 통과');
   const c = { appraised: false }; assert.equal(appraise(t, c), true); assert.equal(t.loupeLeft, 2); assert.equal(appraise(t, c), false);
   t.loupeLeft = 0; assert.equal(appraise(t, { appraised: false }), false);
   const it = makeItem(rng, t); const rr = roughRange(it); assert.ok(rr.lo < it.hint.lo + 1 && rr.hi > it.hint.hi - 1);
-  t.shelf.push(makeItem(rng, t, 2)); t.shelf[0].fake = false;
+  { const { addToStock } = await import('../js/logic.js'); const x = makeItem(rng, t, 2); x.fake = false; addToStock(t, x); }
   let buy = null; for (let i = 0; i < 200 && !buy; i++) { const x = makeCustomer(rng, t); if (x.kind === 'buy') buy = x; }
   assert.ok(buy && buy.offer <= buy.max);
   const r = haggle({ ...buy, patience: 3 }, buy.max * 3); assert.equal(r.status, 'counter');
 }
 console.log('시세·감정 테스트 통과');
+
+// ---- 보관은 무제한, 진열만 칸 수 제한 ----
+{
+  const L = await import('../js/logic.js');
+  const u = L.newState('보관'); L.rollDay(rng, u);
+  assert.equal(L.slotCount(u), 4);
+  const shown = []; for (let i = 0; i < 10; i++) shown.push(L.addToStock(u, L.makeItem(rng, u)));
+  assert.equal(u.shelf.length, 10);                       // 10개 보관 가능
+  assert.equal(L.displayedCount(u), 4);                   // 진열은 4칸까지만
+  assert.deepEqual(shown.slice(0, 4), [true, true, true, true]); assert.equal(shown[4], false);
+  const stored = u.shelf.find((it) => !it.shown);
+  assert.equal(L.setShown(u, stored, true), false);       // 칸이 가득 차면 진열 불가
+  const on = u.shelf.find((it) => it.shown); assert.equal(L.setShown(u, on, false), true); assert.equal(L.setShown(u, stored, true), true);
+  // 사는 손님은 진열 중인 진품만 고른다
+  for (const it of u.shelf) { it.fake = false; it.shown = false; } u.shelf[0].shown = true;
+  for (let i = 0; i < 300; i++) { const c = L.makeCustomer(rng, u); if (c.kind === 'buy') assert.equal(c.item, u.shelf[0]); }
+  // 옛 저장 데이터 정리
+  const old = L.newState('옛날'); old.shelf = [L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old)];
+  for (const it of old.shelf) delete it.shown; L.migrateStock(old); assert.equal(L.displayedCount(old), 4);
+}
+console.log('보관·진열 테스트 통과');

@@ -92,7 +92,7 @@ button.soft { background:#fff; border:2px solid var(--line); font-weight:700; mi
 button.danger { background:#fde4e2; color:#b23a33; border:2px solid #f0b6b2; font-weight:700; min-height:42px; }
 button.wide { width:100%; }
 
-.shelfgrid, #shelf { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin:10px 0; }
+.shelfgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin:10px 0; }
 .slot { background:#fff; border:2px solid var(--line); border-radius:14px; padding:8px 4px; text-align:center; font-size:13px; min-height:130px; }
 .slot .e { font-size:34px; height:60px; display:flex; align-items:center; justify-content:center; } .slot .e img { height:60px; }
 .slot.empty { opacity:.4; display:flex; align-items:center; justify-content:center; }
@@ -129,3 +129,5 @@ button.wide { width:100%; }
 @media (min-width:600px) and (max-aspect-ratio:1/1) { .panel { max-width:640px; margin:12px auto; } }
 
 @media (min-width:901px) and (max-height:800px) { #icost { display:none; } .patience { font-size:12px; } .est { font-size:13px; } }
+
+#shelf .sec { margin:12px 0 2px; font-size:14px; font-weight:700; opacity:1; }

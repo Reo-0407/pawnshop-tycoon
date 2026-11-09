@@ -31,6 +31,14 @@ export function appraise(s, c) {
 }
 export const conditionLabel = (cond) => (cond >= 1.1 ? '상태 상' : cond >= 0.85 ? '상태 중' : '상태 하');
 
+// 재고(shelf)는 개수 제한이 없고, 그중 진열(shown)만 칸 수 제한이 있어요
+export const displayedCount = (s) => s.shelf.filter((it) => it.shown).length;
+export const canDisplay = (s) => displayedCount(s) < slotCount(s);
+export function addToStock(s, it) { it.shown = canDisplay(s); s.shelf.push(it); return it.shown; } // 자리가 있으면 바로 진열
+export function setShown(s, it, shown) { if (shown && !it.shown && !canDisplay(s)) return false; it.shown = shown; return true; }
+// 옛 저장 데이터 정리: shown 이 없으면 앞에서부터 칸 수만큼 진열
+export function migrateStock(s) { if (s.shelf.some((it) => it.shown === undefined)) { let n = 0; for (const it of s.shelf) { it.shown = n < slotCount(s); if (it.shown) n++; } } }
+
 export const trueValue = (it) => (it.fake ? 0 : Math.round(it.base * it.cond));
 export const netWorth = (s) => s.cash + s.shelf.reduce((a, it) => a + trueValue(it), 0);
 
@@ -60,7 +68,7 @@ export function makeItem(rng, state, tier = null) {
 }
 
 export function makeCustomer(rng, state) {
-  const genuine = state.shelf.filter((it) => !it.fake);
+  const genuine = state.shelf.filter((it) => it.shown && !it.fake); // 사는 손님은 진열 중인 물건만 봐요
   const c = pick(rng, CUSTOMERS);
   const interior = interiorLevel(state);
   if (genuine.length && rng() < 0.4) {

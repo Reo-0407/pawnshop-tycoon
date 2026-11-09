@@ -30,7 +30,8 @@ function refreshTop() {
   $('nick').textContent = S.nick; $('day').textContent = S.day; $('cash').textContent = won(S.cash);
   $('custNo').textContent = `${Math.min(total - queue.length, total)}/${total}`;
   $('loupeLeft').textContent = `${S.loupeLeft}회`;
-  const n = `${S.shelf.length}/${G.slotCount(S)}`; $('shelfCount').textContent = n; $('shelfCount2').textContent = n;
+  $('shelfCount').textContent = `${S.shelf.length}개 · 진열 ${G.displayedCount(S)}/${G.slotCount(S)}`;
+  $('shelfCount2').textContent = `보관 ${S.shelf.length}개 · 진열 ${G.displayedCount(S)}/${G.slotCount(S)}칸`;
 }
 function renderTrend() {
   const t = S.trend; $('trend').innerHTML = t ? `<b>오늘의 시세</b><span class="t up">▲ ${t.up} +30%</span><span class="t down">▼ ${t.down} -20%</span>` : '';
@@ -149,7 +150,6 @@ function btn(label, fn) { const b = document.createElement('button'); b.textCont
 // ---------- 흥정 ----------
 function canBuy(price) {
   if (price > S.cash) { toast('가진 돈보다 비싸요'); return false; }
-  if (S.shelf.length >= G.slotCount(S)) { toast('진열대가 가득 찼어요. 재고를 처분하세요'); return false; }
   return true;
 }
 function onOffer() {
@@ -169,7 +169,7 @@ function finish(result, msg) {
 function settle(r) {
   const c = cur;
   if (r.status === 'deal') {
-    if (c.kind === 'sell') { c.item.cost = r.price; S.cash -= r.price; S.shelf.push(c.item); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요`); }
+    if (c.kind === 'sell') { c.item.cost = r.price; S.cash -= r.price; const shown = G.addToStock(S, c.item); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요 (${shown ? '진열대에 올림' : '진열대가 가득 차서 보관함으로'})`); }
     else {
       S.cash += r.price; S.shelf = S.shelf.filter((x) => x !== c.item); floatText(`+${won(r.price)} 💰`);
       toast(`${won(r.price)}에 팔았어요! (차익 ${signed(r.price - basis(c.item))})`);
@@ -181,24 +181,37 @@ function settle(r) {
 function onDecline() { finish('거절', c2(cur.kind === 'sell' ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
 const c2 = (m) => m;
 
-// ---------- 재고(진열대) ----------
+// ---------- 재고: 진열(칸 수 제한) / 보관(제한 없음) ----------
 function renderShelf() {
-  const n = G.slotCount(S); refreshTop();
+  refreshTop();
   const box = $('shelf'); box.innerHTML = '';
-  for (let i = 0; i < n; i++) {
-    const it = S.shelf[i], d = document.createElement('div'); d.className = 'slot' + (it ? '' : ' empty');
-    if (!it) { d.textContent = '빈칸'; box.append(d); continue; }
-    const e = document.createElement('div'); e.className = 'e'; setPic(e, 'items', it);
-    const nm = document.createElement('div'); nm.textContent = it.name;
-    const cost = document.createElement('div'); cost.className = 'small'; cost.textContent = it.cost != null ? `매입 ${won(it.cost)}` : '';
-    const b = document.createElement('button'); b.textContent = `고물상 ${won(G.junkValue(it))}`;
-    b.onclick = () => {
-      if (!confirm(`${it.name}을(를) 고물상에 ${won(G.junkValue(it))}에 팔까요?`)) return;
-      S.cash += G.junkValue(it); S.shelf.splice(i, 1); save(); renderShelf();
-      if (cur && !cur.done) { if (cur.kind === 'buy' && cur.item === it) finish('물건이 없어짐', '어... 물건이 없어졌네요.'); else render(); }
-    };
-    d.append(e, nm, cost, b); box.append(d);
-  }
+  const section = (title, items, empty) => {
+    const h = document.createElement('div'); h.className = 'small sec'; h.textContent = title; box.append(h);
+    const g = document.createElement('div'); g.className = 'shelfgrid'; box.append(g);
+    if (!items.length) { const e = document.createElement('div'); e.className = 'small'; e.textContent = empty; g.append(e); }
+    for (const it of items) g.append(slot(it));
+  };
+  section(`🛍️ 진열 중 (${G.displayedCount(S)}/${G.slotCount(S)}칸) — 손님은 여기 있는 물건만 사요`, S.shelf.filter((it) => it.shown), '진열 중인 물건이 없어요');
+  section(`📦 보관 중 (${S.shelf.filter((it) => !it.shown).length}개, 개수 제한 없음)`, S.shelf.filter((it) => !it.shown), '보관 중인 물건이 없어요');
+}
+function slot(it) {
+  const d = document.createElement('div'); d.className = 'slot';
+  const e = document.createElement('div'); e.className = 'e'; setPic(e, 'items', it);
+  const nm = document.createElement('div'); nm.textContent = it.name;
+  const cost = document.createElement('div'); cost.className = 'small'; cost.textContent = it.cost != null ? `매입 ${won(it.cost)}` : '';
+  const t = document.createElement('button'); t.textContent = it.shown ? '보관하기' : '진열하기';
+  t.onclick = () => {
+    if (!G.setShown(S, it, !it.shown)) return toast('진열 칸이 가득 찼어요. 다른 물건을 보관하거나 진열대를 늘리세요');
+    save(); renderShelf();
+    if (cur && !cur.done) { if (cur.kind === 'buy' && cur.item === it && !it.shown) finish('물건이 없어짐', '어... 진열대에서 물건이 없어졌네요.'); else render(); }
+  };
+  const b = document.createElement('button'); b.textContent = `고물상 ${won(G.junkValue(it))}`;
+  b.onclick = () => {
+    if (!confirm(`${it.name}을(를) 고물상에 ${won(G.junkValue(it))}에 팔까요?`)) return;
+    S.cash += G.junkValue(it); S.shelf.splice(S.shelf.indexOf(it), 1); save(); renderShelf();
+    if (cur && !cur.done) { if (cur.kind === 'buy' && cur.item === it) finish('물건이 없어짐', '어... 물건이 없어졌네요.'); else render(); }
+  };
+  d.append(e, nm, cost, t, b); return d;
 }
 
 // ---------- 밤: 정산과 업그레이드 ----------
@@ -207,7 +220,7 @@ async function endOfDay() {
   refreshTop(); save();
   if (bankrupt) { $('overMsg').textContent = `월세 ${won(rent)}을 내지 못했어요. 최종 ${S.day}일차.`; localStorage.removeItem(SAVE_KEY); return show('over'); }
   $('nightTitle').textContent = `🌙 ${S.day - 1}일차 마감`;
-  $('nightSummary').innerHTML = `월세 <b>-${won(rent)}</b><br>가진 돈 <b>${won(S.cash)}</b><br>진열품 가치 <b>${won(G.netWorth(S) - S.cash)}</b><br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>`;
+  $('nightSummary').innerHTML = `월세 <b>-${won(rent)}</b><br>가진 돈 <b>${won(S.cash)}</b><br>재고 가치 <b>${won(G.netWorth(S) - S.cash)}</b><br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>`;
   renderUpgrades(); show('night');
   const r = await submitScore(S, G.netWorth(S));
   const el = $('subStatus'); if (!el) return;
@@ -237,7 +250,7 @@ async function openBoard() {
 }
 
 // ---------- 시작 ----------
-function begin(state) { S = state; S.loupeLeft ??= 0; S.trend ??= null; for (const it of S.shelf) it.cat ??= undefined; startDay(); }
+function begin(state) { S = state; S.loupeLeft ??= 0; S.trend ??= null; G.migrateStock(S); startDay(); }
 $('btnStart').onclick = () => {
   const nick = $('nickInput').value.trim();
   if (!nick) return toast('닉네임을 입력하세요');
