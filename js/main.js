@@ -135,14 +135,12 @@ function render() {
   for (const f of facs) mb.append(btn(`${sell ? '요구가' : it.cost != null ? '매입가' : '시세'}×${f}`, () => setPrice(base * f)));
   // 버튼들
   $('negotiate').hidden = done; $('btnNext').hidden = !done; $('btnNext').textContent = queue.length ? '다음 손님' : '하루 마치기';
-  $('btnAppraise').hidden = !sell || done; $('btnOffer').hidden = done; $('btnDeal').hidden = done; $('btnDecline').hidden = done;
+  $('btnAppraise').hidden = !sell || done; $('btnOffer').hidden = done; $('btnDecline').hidden = done;
   document.querySelector('.row2').style.display = done ? 'none' : '';
   document.querySelector('.row2').style.gridTemplateColumns = sell ? '' : '1fr';
   $('btnAppraise').textContent = c.appraised ? '감정 완료 ✔' : `감정하기 (돋보기 ${S.loupeLeft})`;
   $('btnAppraise').disabled = c.appraised || S.loupeLeft <= 0;
   $('btnOffer').textContent = sell ? '이 가격 제안' : '이 가격 요구';
-  if (sell) $('btnDeal').textContent = `요구가에 구매 (${won(c.ask)})`;
-  else $('btnDeal').textContent = `제안가에 판매 (${won(c.offer)}, 차익 ${signed(c.offer - basis(it))})`;
   $('btnDecline').textContent = sell ? '사지 않기' : '팔지 않기';
   updatePreview();
 }
@@ -158,11 +156,6 @@ function onOffer() {
   const offer = getPrice(); if (!(offer > 0)) return toast('가격을 입력하세요');
   if (isSell() && !canBuy(offer)) return;
   settle(G.haggle(cur, offer));
-}
-function onDeal() {
-  const price = isSell() ? cur.ask : cur.offer;
-  if (isSell() && !canBuy(price)) return;
-  settle({ status: 'deal', price, msg: '거래 성사!' });
 }
 function onAppraise() {
   if (!G.appraise(S, cur)) return toast('돋보기 횟수가 없어요');
@@ -183,7 +176,7 @@ function settle(r) {
     }
     save(); refreshTop(); finish('거래 성사 🤝', r.msg + ' 🤝');
   } else if (r.status === 'leave') finish('손님이 떠남 😤', r.msg + ' 😤');
-  else { say(r.msg); render(); }
+  else { say(r.msg); setPrice(r.price); render(); }  // 역제안 가격을 입력칸에 넣어 한 번에 받아들일 수 있게
 }
 function onDecline() { finish('거절', c2(cur.kind === 'sell' ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
 const c2 = (m) => m;
@@ -253,7 +246,7 @@ $('btnStart').onclick = () => {
 };
 $('btnRestart').onclick = () => { $('nickInput').value = S.nick; show('title'); };
 $('btnNext').onclick = nextCustomer;
-$('btnOffer').onclick = onOffer; $('btnDeal').onclick = onDeal; $('btnDecline').onclick = onDecline; $('btnAppraise').onclick = onAppraise;
+$('btnOffer').onclick = onOffer; $('btnDecline').onclick = onDecline; $('btnAppraise').onclick = onAppraise;
 $('btnNextDay').onclick = startDay;
 $('btnBoard').onclick = $('btnTitleBoard').onclick = openBoard;
 $('btnCloseBoard').onclick = () => ($('modal').hidden = true);
