@@ -7,7 +7,7 @@ const headers = () => ({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUP
 export async function submitScore(state, worth) {
   if (!boardEnabled()) return { ok: false, reason: 'off' };
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_score`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/pawn_submit_score`, {
       method: 'POST', headers: headers(),
       body: JSON.stringify({ p_nick: state.nick, p_secret: state.secret, p_day: state.day, p_worth: worth }),
     });
@@ -20,7 +20,7 @@ export async function submitScore(state, worth) {
 export async function fetchTop(limit = 20) {
   if (!boardEnabled()) return null;
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard_public?select=nick,worth,day&order=worth.desc&limit=${limit}`, { headers: headers() });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/pawn_leaderboard?select=nick,worth,day&order=worth.desc&limit=${limit}`, { headers: headers() });
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
