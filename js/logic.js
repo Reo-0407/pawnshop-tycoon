@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=12';
+import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, LOAN, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=13';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -9,7 +9,7 @@ export function newState(nick) {
   return {
     nick, day: 1, cash: START_CASH, shelf: [],
     up: { loupe: 0, interior: 0 }, // 각 업그레이드의 현재 단계(0부터)
-    trend: null, loupeLeft: 0, bonusCustomers: 0,
+    trend: null, loupeLeft: 0, bonusCustomers: 0, pledges: [],
     secret: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36),
   };
 }
@@ -31,7 +31,8 @@ export function appraise(s, c) {
 export const conditionLabel = (cond) => (cond >= 1.1 ? '상태 상' : cond >= 0.85 ? '상태 중' : '상태 하');
 
 export const trueValue = (it) => (it.fake ? 0 : Math.round(it.base * it.cond));
-export const netWorth = (s) => s.cash + s.shelf.reduce((a, it) => a + trueValue(it), 0);
+export const pledgedValue = (s) => (s.pledges || []).reduce((a, p) => a + p.loan, 0); // 빌려준 돈도 내 재산이에요
+export const netWorth = (s) => s.cash + s.shelf.reduce((a, it) => a + trueValue(it), 0) + pledgedValue(s);
 
 function pickTier(rng, interior) {
   const w = [50 - 8 * (interior - 1), 35 - 2 * (interior - 1), 13 + 6 * (interior - 1), 2 + 4 * (interior - 1)].map((x) => Math.max(1, x));
@@ -95,7 +96,32 @@ export function acceptPromo(s, c) {
   return { scam: c.scam, bonus: c.scam ? 0 : PROMO.bonus };
 }
 
+// 대출 손님: 물건을 맡기고 돈을 빌리려고 해요. ask = 빌리고 싶은 돈, min = 이만큼은 받아야 맡기는 돈
+export function makePawn(rng, state) {
+  const item = makeItem(rng, state);
+  const believed = item.base * item.cond * trendMult(state, item); // 손님은 진품인 줄 알고 있음
+  const min = round100(believed * rand(rng, 0.35, 0.55));
+  const ask = round100(believed * rand(rng, 0.5, 0.75));
+  return { kind: 'pawn', who: pick(rng, CUSTOMERS), item, min, ask: Math.max(ask, min), patience: 3 };
+}
+// 대출 실행: 담보는 기한까지 내가 맡아 둬요 (재고에는 안 들어가요)
+export function lend(s, c, loan) {
+  const p = { item: c.item, loan, repay: round100(loan * (1 + LOAN.rate)), due: s.day + LOAN.days };
+  s.cash -= loan; c.item.cost = loan; (s.pledges ||= []).push(p); return p;
+}
+// 하루를 시작할 때 기한이 된 담보 처리: 진품이면 일정 확률로 찾아가고(원금+이자), 가품이거나 안 찾아가면 내 재고가 돼요
+export function settlePledges(rng, s) {
+  const out = [], keep = [];
+  for (const p of s.pledges || []) {
+    if (p.due > s.day) { keep.push(p); continue; }
+    if (!p.item.fake && rng() < LOAN.redeemChance) { s.cash += p.repay; out.push({ kind: 'redeem', p }); }
+    else { p.item.cost = p.loan; s.shelf.push(p.item); out.push({ kind: 'forfeit', p }); }
+  }
+  s.pledges = keep; return out;
+}
+
 export function makeCustomer(rng, state) {
+  if (state.day >= 2 && rng() < LOAN.chance) return makePawn(rng, state);
   if (rng() < 0.4) { const b = makeBuyer(rng, state); if (b) return b; }
   return makeSeller(rng, state);
 }
@@ -123,14 +149,15 @@ export function fixCustomer(rng, state, c) {
 // 역제안은 한 방향으로만 움직여요: 사는 손님은 값을 올리기만, 파는 손님은 내리기만 해요.
 export function haggle(c, offer) {
   c.rounds = (c.rounds || 0) + 1;
-  if (c.kind === 'sell') { // 플레이어가 사는 쪽
-    if (offer >= c.min) return { status: 'deal', price: Math.min(offer, c.ask ?? offer), msg: '좋아요! 그 가격에 팔게요.' }; // 요구가보다 더 낼 필요는 없어요
+  if (c.kind === 'sell' || c.kind === 'pawn') { // 플레이어가 돈을 내는 쪽 (사 오기 / 대출)
+    const pawn = c.kind === 'pawn';
+    if (offer >= c.min) return { status: 'deal', price: Math.min(offer, c.ask ?? offer), msg: pawn ? '좋아요! 그 금액이면 맡길게요.' : '좋아요! 그 가격에 팔게요.' }; // 요구가보다 더 낼 필요는 없어요
     c.patience -= offer < c.min * 0.6 ? 2 : 1;
-    if (c.patience <= 0) return { status: 'leave', msg: '너무 박하네요! 안 팔아요!' };
+    if (c.patience <= 0) return { status: 'leave', msg: pawn ? '그것밖에 안 돼요? 다른 데 갈래요!' : '너무 박하네요! 안 팔아요!' };
     const floor = round100(c.min);
     const cp = Math.min(c.ask, Math.max(floor, round100(c.min * (1.2 - 0.08 * c.rounds)))); // 현재 요구가보다 낮게, 최저가 아래로는 안 내려감
     c.ask = cp;
-    return { status: 'counter', price: cp, msg: `음... ${cp.toLocaleString()}원이면 팔게요.` };
+    return { status: 'counter', price: cp, msg: c.kind === 'pawn' ? `음... ${cp.toLocaleString()}원은 빌려주셔야 맡길게요.` : `음... ${cp.toLocaleString()}원이면 팔게요.` };
   }
   // 플레이어가 파는 쪽
   if (offer <= c.max) return { status: 'deal', price: Math.max(offer, c.offer ?? offer), msg: '좋아요! 살게요.' }; // 손님이 먼저 부른 값보다 싸게 팔 필요는 없어요

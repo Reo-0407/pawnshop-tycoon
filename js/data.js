@@ -70,6 +70,8 @@ export const COLLECTOR_MULT = 2;      // 원래 값의 2배
 export const COLLECTOR_CHANCE = 0.3;  // 하루에 올 확률 (재고에 맞는 물건이 있을 때만)
 // 마케팅 도우미: 홍보비를 받고 내일 손님을 늘려 준다고 하지만 사기일 수도 있어요
 export const PROMO = { dayChance: 0.45, scamChance: 0.4, bonus: 4, minPrice: 5000, maxPrice: 300000, cashRate: 0.12 };
+// 전당포 대출: 물건을 맡기고 돈을 빌려가요. 기한 안에 찾아가면 원금+이자를 받고, 안 찾아가면 담보가 내 재고가 돼요
+export const LOAN = { chance: 0.15, rate: 0.2, days: 3, redeemChance: 0.6 };
 export const LOUPE_USES = (level) => 1 + 2 * level; // 하루 감정 횟수 (1단계 3회, 3단계 7회)
 export const START_CASH = 100000;
 export const CUSTOMERS_PER_DAY = 8;

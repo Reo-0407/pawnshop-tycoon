@@ -130,3 +130,36 @@ console.log('흥정 방향 테스트 통과');
   assert.equal(makeDay(rng, q, 3).length, 3); assert.equal(q.bonusCustomers, 4); assert.equal(makeDay(rng, q, 0).length, 0);
 }
 console.log('버그 수정 테스트 통과');
+
+// ---- 전당포 대출 ----
+{
+  const { LOAN } = await import('../js/data.js');
+  const q = newState('대출'); L.rollDay(rng, q);
+  // 첫날엔 안 오고, 2일차부터 15% 안팎으로 온다
+  let n1 = 0; for (let i = 0; i < 300; i++) if (L.makeCustomer(rng, q).kind === 'pawn') n1++; assert.equal(n1, 0);
+  q.day = 2; let n2 = 0; for (let i = 0; i < 2000; i++) if (L.makeCustomer(rng, q).kind === 'pawn') n2++; assert.ok(n2 > 230 && n2 < 370, `대출 손님 빈도 ${n2}/2000`);
+  // 흥정: 파는 손님과 같은 방식(내가 돈을 내는 쪽). 희망 대출금보다 많이 적어도 희망액만 나간다
+  const pw = L.makePawn(rng, q); assert.equal(pw.kind, 'pawn'); assert.ok(pw.ask >= pw.min);
+  assert.equal(haggle({ ...pw, patience: 3 }, pw.ask * 5).price, pw.ask);
+  assert.equal(haggle({ ...pw, patience: 3 }, pw.min).status, 'deal');
+  assert.equal(haggle({ ...pw, patience: 3 }, 100).status, 'counter');
+  // 대출: 돈이 나가고 담보는 재고가 아니라 담보 목록에 들어간다. 재산에는 빌려준 돈이 잡힌다
+  q.cash = 200000; const before = netWorth(q);
+  const p = L.lend(q, { item: pw.item }, 50000);
+  assert.equal(q.cash, 150000); assert.equal(q.shelf.length, 0); assert.equal(q.pledges.length, 1);
+  assert.equal(p.repay, 60000); assert.equal(p.due, 2 + LOAN.days); assert.equal(netWorth(q), before - 50000 + 50000);
+  // 기한 전엔 그대로, 기한이 되면 진품은 60% 안팎으로 찾아가고 나머지는 내 재고가 된다
+  assert.equal(L.settlePledges(rng, q).length, 0); q.day = p.due;
+  let redeemed = 0, forfeited = 0, cashGain = 0; const N = 1000;
+  for (let i = 0; i < N; i++) {
+    const z = newState('기한'); z.day = 5; z.cash = 0; const it = { ...pw.item, fake: false };
+    z.pledges = [{ item: it, loan: 40000, repay: 48000, due: 5 }];
+    const out = L.settlePledges(rng, z); assert.equal(out.length, 1); assert.equal(z.pledges.length, 0);
+    if (out[0].kind === 'redeem') { redeemed++; assert.equal(z.cash, 48000); assert.equal(z.shelf.length, 0); }
+    else { forfeited++; assert.equal(z.cash, 0); assert.equal(z.shelf.length, 1); assert.equal(z.shelf[0].cost, 40000); }
+  }
+  assert.ok(redeemed > 520 && redeemed < 680, `찾아간 비율 ${redeemed}/${N}`);
+  // 가품을 맡기면 절대 안 찾아간다 (가품이 내 재고로 남음)
+  for (let i = 0; i < 100; i++) { const z = newState('가품'); z.day = 5; z.pledges = [{ item: { ...pw.item, fake: true }, loan: 1000, repay: 1200, due: 5 }]; assert.equal(L.settlePledges(rng, z)[0].kind, 'forfeit'); }
+}
+console.log('전당포 대출 테스트 통과');

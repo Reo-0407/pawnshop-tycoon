@@ -1,6 +1,6 @@
-import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT } from './data.js?v=12';
-import * as G from './logic.js?v=12';
-import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=12';
+import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=13';
+import * as G from './logic.js?v=13';
+import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=13';
 
 const $ = (id) => document.getElementById(id);
 const won = (n) => `${Math.round(n).toLocaleString()}원`;
@@ -34,7 +34,7 @@ function refreshTop() {
   $('nick').textContent = S.nick; $('day').textContent = S.day; $('cash').textContent = won(S.cash);
   $('custNo').textContent = `${Math.min(total - queue.length, total)}/${total}`;
   $('loupeLeft').textContent = `${S.loupeLeft}회`;
-  $('shelfCount').textContent = `${S.shelf.length}개`;
+  const pl = (S.pledges || []).length; $('shelfCount').textContent = `${S.shelf.length}개${pl ? ` · 담보 ${pl}` : ''}`;
   $('shelfCount2').textContent = `${S.shelf.length}개 · 가치 ${won(S.shelf.reduce((a, it) => a + G.trueValue(it), 0))}`;
 }
 function renderTrend() {
@@ -44,8 +44,16 @@ function renderTrend() {
 // ---------- 하루 / 손님 ----------
 function startDay(resume = false) {
   if (resume) { queue = G.makeDay(Math.random, S, S.remain); total = S.dayTotal || queue.length; } // 하루 도중 새로고침: 돋보기 횟수·시세는 그대로
-  else { G.rollDay(Math.random, S); queue = G.makeDay(Math.random, S); total = queue.length; S.dayTotal = total; S.remain = total; S.phase = 'day'; }
-  cur = null; save(); show('shop'); renderTrend(); nextCustomer();
+  else { G.rollDay(Math.random, S); S.news = G.settlePledges(Math.random, S); queue = G.makeDay(Math.random, S); total = queue.length; S.dayTotal = total; S.remain = total; S.phase = 'day'; }
+  cur = null; save(); show('shop'); renderTrend(); nextCustomer(); showNews();
+}
+// 어제 맡긴 담보의 결과를 아침에 알려 줘요
+function showNews() {
+  const n = S.news || []; if (!n.length) return;
+  $('newsList').innerHTML = n.map((e) => `<div class="news">${e.kind === 'redeem'
+    ? `✅ <b>${e.p.item.name}</b>을(를) 찾아갔어요! 원금+이자 <b>+${won(e.p.repay)}</b>`
+    : `⏰ <b>${e.p.item.name}</b>은(는) 기한이 지나 내 재고가 됐어요 (빌려준 돈 ${won(e.p.loan)})${e.p.item.fake ? ' — 가품이었어요 😭' : ''}`}</div>`).join('');
+  $('newsModal').hidden = false; S.news = []; refreshTop(); save();
 }
 let busy = false; // 손님이 걸어 나가는 동안 '다음 손님'을 또 눌러도 한 명만 넘어가게
 function nextCustomer() {
@@ -69,7 +77,8 @@ function nextCustomer() {
       say(`${cur.who.role}예요! ${it.name}을(를) 시세의 ${COLLECTOR_MULT}배, ${won(cur.offer)}에 꼭 사고 싶어요!`);
       setPic(t, 'items', it);
     } else {
-      say(cur.kind === 'sell' ? `${it.name}을(를) ${won(cur.ask)}에 팔고 싶어요!` : `${it.name} 사고 싶어요. ${won(cur.offer)}에 어때요?`);
+      say(cur.kind === 'pawn' ? `${it.name}을(를) 맡기고 ${won(cur.ask)}만 빌리고 싶어요! ${LOAN.days}일 안에 이자 ${Math.round(LOAN.rate * 100)}%를 붙여서 찾으러 올게요.`
+        : cur.kind === 'sell' ? `${it.name}을(를) ${won(cur.ask)}에 팔고 싶어요!` : `${it.name} 사고 싶어요. ${won(cur.offer)}에 어때요?`);
       setPic(t, 'items', it);
     }
     t.className = 'tableitem'; void t.offsetWidth; t.className = 'tableitem drop';
@@ -84,11 +93,12 @@ function floatText(text) { const f = $('float'); f.textContent = text; f.classNa
 
 // 사 오는 값(매입가) 기준: 내 재고에 없던 옛 저장 데이터는 정상 시세로 대신
 const basis = (it) => it.cost ?? G.trueValue(it);
-const isSell = () => cur.kind === 'sell';
+const isSell = () => cur.kind === 'sell' || cur.kind === 'pawn'; // 내가 돈을 내는 쪽 (사 오기 / 대출)
+const isPawn = () => cur.kind === 'pawn';
 
 function initPrice() {
   const c = cur;
-  setPrice(c.kind === 'sell' ? c.ask * 0.7 : Math.max(c.offer * 1.2, basis(c.item) * 1.3));
+  setPrice(isSell() ? c.ask * 0.7 : Math.max(c.offer * 1.2, basis(c.item) * 1.3));
 }
 function setPrice(v) {
   v = Math.max(100, Math.round(v / 100) * 100); $('price').value = v; updatePreview();
@@ -108,6 +118,10 @@ function updatePreview() {
   const p = getPrice(), it = cur.item;
   $('priceTag').textContent = man(p);
   const m = $('margin');
+  if (isPawn()) {
+    const r = cur.appraised ? it.hint : G.roughRange(it), mid = (r.lo + r.hi) / 2;
+    m.textContent = `시세 중간값의 ${Math.round((p / mid) * 100)}% · ${LOAN.days}일 뒤 이자 ${won(p * LOAN.rate)} 받아요`; m.className = 'margin'; return;
+  }
   if (isSell()) {
     const r = cur.appraised ? it.hint : G.roughRange(it);
     const mid = (r.lo + r.hi) / 2, d = mid - p;
@@ -119,9 +133,9 @@ function updatePreview() {
 }
 
 function render() {
-  const c = cur, it = c.item, promo = c.kind === 'promo', sell = c.kind === 'sell', done = c.done;
+  const c = cur, it = c.item, promo = c.kind === 'promo', pawn = c.kind === 'pawn', sell = c.kind === 'sell' || pawn, done = c.done;
   // 상단: 상태·기분·이름·인내심
-  $('stateTag').textContent = (promo ? '마케팅 제안' : sell ? '매입 상담' : c.collector ? '수집가 상담' : '판매 상담') + (done ? ` · ${c.result || '종료'}` : promo ? ' · 검토 중' : ' · 흥정 중');
+  $('stateTag').textContent = (promo ? '마케팅 제안' : pawn ? '대출 상담' : sell ? '매입 상담' : c.collector ? '수집가 상담' : '판매 상담') + (done ? ` · ${c.result || '종료'}` : promo ? ' · 검토 중' : ' · 흥정 중');
   const p = Math.max(c.patience, 0);
   $('moodTag').textContent = promo ? '수상?' : p >= 3 ? '좋음' : p === 2 ? '보통' : '나쁨';
   $('whoName').textContent = c.who.name; $('whoRole').textContent = c.who.role;
@@ -143,6 +157,7 @@ function render() {
     const mult = G.trendMult(S, it);
     tags.push(`<span class="tag">${G.conditionLabel(it.cond)}</span>`, `<span class="tag">${it.cat}</span>`, `<span class="tag">${TIERS[it.tier]}</span>`);
     if (c.collector) tags.push(`<span class="tag up">수집가 특가 ×${COLLECTOR_MULT}</span>`);
+    if (pawn) tags.push(`<span class="tag up">담보 대출 · ${LOAN.days}일 · 이자 ${Math.round(LOAN.rate * 100)}%</span>`);
     if (mult > 1) tags.push('<span class="tag up">인기 ▲</span>'); else if (mult < 1) tags.push('<span class="tag down">비인기 ▼</span>');
     if (sell && c.appraised) tags.push(it.hint.looksReal ? '<span class="tag real">진품 같음 ✔</span>' : '<span class="tag fake">가품 같음 ✖</span>');
     $('itags').innerHTML = tags.join('');
@@ -153,9 +168,9 @@ function render() {
       $('irange').textContent = `내 판단 시세 ${won(G.trueValue(it) * mult)}`;
       $('icost').textContent = it.cost != null ? `내 매입가 ${won(it.cost)}` : '';
     }
-    $('offerLabel').textContent = sell ? '손님 요구가' : c.collector ? '수집가 제안가' : '손님 제안가';
+    $('offerLabel').textContent = pawn ? '손님 희망 대출금' : sell ? '손님 요구가' : c.collector ? '수집가 제안가' : '손님 제안가';
     $('offerVal').textContent = won(sell ? c.ask : c.offer);
-    $('askLabel').textContent = sell ? '내 제안가' : '내 요구가';
+    $('askLabel').textContent = pawn ? '내가 빌려줄 돈' : sell ? '내 제안가' : '내 요구가';
     // 빠른 버튼
     const st = stepsFor(sell ? c.ask : basis(it) * 1.5); const sb = $('steps'); sb.innerHTML = '';
     sb.style.gridTemplateColumns = `repeat(${st.length * 2},1fr)`;
@@ -172,8 +187,8 @@ function render() {
   document.querySelector('.row2').style.gridTemplateColumns = (sell || promo) ? '' : '1fr';
   $('btnAppraise').textContent = c.appraised ? '감정 완료 ✔' : promo ? `수상한 점 찾기 (돋보기 ${S.loupeLeft})` : `감정하기 (돋보기 ${S.loupeLeft})`;
   $('btnAppraise').disabled = c.appraised || S.loupeLeft <= 0;
-  $('btnOffer').textContent = promo ? `맡기기 (${won(c.price)})` : sell ? '이 가격 제안' : '이 가격 요구';
-  $('btnDecline').textContent = promo ? '거절하기' : sell ? '사지 않기' : '팔지 않기';
+  $('btnOffer').textContent = promo ? `맡기기 (${won(c.price)})` : pawn ? '이 금액 대출' : sell ? '이 가격 제안' : '이 가격 요구';
+  $('btnDecline').textContent = promo || pawn ? '거절하기' : sell ? '사지 않기' : '팔지 않기';
   updatePreview();
 }
 function btn(label, fn) { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; return b; }
@@ -210,7 +225,10 @@ function finish(result, msg) {
 function settle(r) {
   const c = cur;
   if (r.status === 'deal') {
-    if (c.kind === 'sell') { c.item.cost = r.price; S.cash -= r.price; S.shelf.push(c.item); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요`); }
+    if (c.kind === 'pawn') {
+      const p = G.lend(S, c, r.price); floatText(`-${won(r.price)} 🔒`);
+      toast(`${c.item.name}을(를) 담보로 ${won(r.price)} 대출! ${p.due}일차에 ${won(p.repay)} 받으러 와요`);
+    } else if (c.kind === 'sell') { c.item.cost = r.price; S.cash -= r.price; S.shelf.push(c.item); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요`); }
     else {
       S.cash += r.price; S.shelf = S.shelf.filter((x) => x !== c.item); floatText(`+${won(r.price)} 💰`);
       toast(`${won(r.price)}에 팔았어요! (차익 ${signed(r.price - basis(c.item))})`);
@@ -219,7 +237,7 @@ function settle(r) {
   } else if (r.status === 'leave') finish('손님이 떠남 😤', r.msg + ' 😤');
   else { say(r.msg); setPrice(r.price); render(); }  // 역제안 가격을 입력칸에 넣어 한 번에 받아들일 수 있게
 }
-function onDecline() { finish('거절', c2(cur.kind === 'sell' ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
+function onDecline() { finish('거절', c2(isSell() ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
 const c2 = (m) => m;
 
 // ---------- 재고: 개수 제한 없음. 손님은 재고 전체에서 사 가요 ----------
@@ -229,6 +247,17 @@ function renderShelf() {
   const g = document.createElement('div'); g.className = 'shelfgrid'; box.append(g);
   if (!S.shelf.length) { const e = document.createElement('div'); e.className = 'small'; e.textContent = '재고가 비었어요. 손님한테서 물건을 사 오세요!'; g.append(e); }
   for (const it of S.shelf) g.append(slot(it));
+  if ((S.pledges || []).length) {
+    const h = document.createElement('div'); h.className = 'small sec'; h.textContent = '🔒 맡아 둔 담보 — 기한이 지나면 안 찾아간 건 내 재고가 돼요'; box.append(h);
+    const pg = document.createElement('div'); pg.className = 'shelfgrid'; box.append(pg);
+    for (const p of S.pledges) {
+      const d = document.createElement('div'); d.className = 'slot';
+      const e = document.createElement('div'); e.className = 'e'; setPic(e, 'items', p.item);
+      const nm = document.createElement('div'); nm.textContent = p.item.name;
+      const info = document.createElement('div'); info.className = 'small'; info.textContent = `${p.due}일차까지 · 대출 ${won(p.loan)} → ${won(p.repay)}`;
+      d.append(e, nm, info); pg.append(d);
+    }
+  }
 }
 function slot(it) {
   const d = document.createElement('div'); d.className = 'slot';
@@ -262,7 +291,7 @@ async function endOfDay() {
 function renderNight() {
   const n = S.lastNight || { rent: 0, soldN: 0, soldFor: 0 };
   $('nightTitle').textContent = `🌙 ${S.day - 1}일차 마감`;
-  $('nightSummary').innerHTML = `월세 <b>-${won(n.rent)}</b>${n.soldN ? `<br><span class="small">현금이 모자라서 재고 ${n.soldN}개를 고물상에 ${won(n.soldFor)}에 팔았어요</span>` : ''}<br>가진 돈 <b>${won(S.cash)}</b><br>재고 가치 <b>${won(G.netWorth(S) - S.cash)}</b><br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>${S.bonusCustomers ? `<br>📣 내일 손님 <b>+${S.bonusCustomers}명</b>` : ''}`;
+  $('nightSummary').innerHTML = `월세 <b>-${won(n.rent)}</b>${n.soldN ? `<br><span class="small">현금이 모자라서 재고 ${n.soldN}개를 고물상에 ${won(n.soldFor)}에 팔았어요</span>` : ''}<br>가진 돈 <b>${won(S.cash)}</b><br>재고 가치 <b>${won(S.shelf.reduce((a, it) => a + G.trueValue(it), 0))}</b>${(S.pledges || []).length ? `<br>🔒 맡아 둔 담보 <b>${S.pledges.length}개</b> (빌려준 돈 ${won(G.pledgedValue(S))})` : ''}<br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>${S.bonusCustomers ? `<br>📣 내일 손님 <b>+${S.bonusCustomers}명</b>` : ''}`;
   renderUpgrades();
 }
 function renderUpgrades() {
@@ -309,6 +338,7 @@ $('btnBoard').onclick = $('btnTitleBoard').onclick = openBoard;
 $('btnCloseBoard').onclick = () => ($('modal').hidden = true);
 $('btnShelf').onclick = () => { renderShelf(); $('shelfModal').hidden = false; };
 $('btnCloseShelf').onclick = () => ($('shelfModal').hidden = true);
+$('btnCloseNews').onclick = () => ($('newsModal').hidden = true);
 $('price').addEventListener('input', updatePreview);
 $('price').addEventListener('keydown', (e) => { if (e.key === 'Enter') onOffer(); });
 { const n = lastNick(); if (n) $('nickInput').value = n; }
