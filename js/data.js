@@ -49,7 +49,6 @@ export const CUSTOMERS = [
 ].map(([id, name, emoji, role]) => ({ id, name, emoji, role }));
 
 export const UPGRADES = {
-  slots: { name: '진열대', desc: '진열할 수 있는 칸이 늘어요', levels: [4, 6, 8, 10, 12], costs: [30000, 60000, 120000, 250000] },
   loupe: { name: '돋보기', desc: '시세 범위가 좁아지고 가품을 더 잘 찾아요', levels: [1, 2, 3], costs: [80000, 300000] },
   interior: { name: '인테리어', desc: '비싼 물건과 부자 손님이 더 자주 와요', levels: [1, 2, 3, 4, 5], costs: [50000, 150000, 400000, 1000000] },
 };
@@ -58,6 +57,19 @@ export const LOUPE = {
   spread: [0, 0.4, 0.25, 0.1],     // 시세 범위 ±
   accuracy: [0, 0.65, 0.82, 0.95], // 진품 판정 정확도
 };
+// 가끔 오는 수집가: 원하는 물건이 재고에 있으면 보통 시세의 2배를 쳐줘요
+export const COLLECTORS = [
+  { role: '깡통 수집가', want: { id: 'can' } },
+  { role: '양말 수집가', want: { id: 'sock' } },
+  { role: '시계 수집가', want: { cat: '시계' } },
+  { role: '악기 수집가', want: { cat: '악기' } },
+  { role: '보석 수집가', want: { cat: '보석' } },
+  { role: '골동품 수집가', want: { cat: '골동품' } },
+];
+export const COLLECTOR_MULT = 2;      // 원래 값의 2배
+export const COLLECTOR_CHANCE = 0.3;  // 하루에 올 확률 (재고에 맞는 물건이 있을 때만)
+// 마케팅 도우미: 홍보비를 받고 내일 손님을 늘려 준다고 하지만 사기일 수도 있어요
+export const PROMO = { dayChance: 0.45, scamChance: 0.4, bonus: 4, minPrice: 5000, maxPrice: 300000, cashRate: 0.12 };
 export const LOUPE_USES = (level) => 1 + 2 * level; // 하루 감정 횟수 (1단계 3회, 3단계 7회)
 export const START_CASH = 100000;
 export const CUSTOMERS_PER_DAY = 8;

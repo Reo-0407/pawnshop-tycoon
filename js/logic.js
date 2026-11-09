@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, CATS, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js';
+import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -8,12 +8,11 @@ const round100 = (n) => Math.max(100, Math.round(n / 100) * 100);
 export function newState(nick) {
   return {
     nick, day: 1, cash: START_CASH, shelf: [],
-    up: { slots: 0, loupe: 0, interior: 0 }, // 각 업그레이드의 현재 단계(0부터)
-    trend: null, loupeLeft: 0,
+    up: { loupe: 0, interior: 0 }, // 각 업그레이드의 현재 단계(0부터)
+    trend: null, loupeLeft: 0, bonusCustomers: 0,
     secret: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36),
   };
 }
-export const slotCount = (s) => UPGRADES.slots.levels[s.up.slots];
 export const loupeLevel = (s) => UPGRADES.loupe.levels[s.up.loupe];
 export const interiorLevel = (s) => UPGRADES.interior.levels[s.up.interior];
 
@@ -30,14 +29,6 @@ export function appraise(s, c) {
   s.loupeLeft -= 1; c.appraised = true; return true;
 }
 export const conditionLabel = (cond) => (cond >= 1.1 ? '상태 상' : cond >= 0.85 ? '상태 중' : '상태 하');
-
-// 재고(shelf)는 개수 제한이 없고, 그중 진열(shown)만 칸 수 제한이 있어요
-export const displayedCount = (s) => s.shelf.filter((it) => it.shown).length;
-export const canDisplay = (s) => displayedCount(s) < slotCount(s);
-export function addToStock(s, it) { it.shown = canDisplay(s); s.shelf.push(it); return it.shown; } // 자리가 있으면 바로 진열
-export function setShown(s, it, shown) { if (shown && !it.shown && !canDisplay(s)) return false; it.shown = shown; return true; }
-// 옛 저장 데이터 정리: shown 이 없으면 앞에서부터 칸 수만큼 진열
-export function migrateStock(s) { if (s.shelf.some((it) => it.shown === undefined)) { let n = 0; for (const it of s.shelf) { it.shown = n < slotCount(s); if (it.shown) n++; } } }
 
 export const trueValue = (it) => (it.fake ? 0 : Math.round(it.base * it.cond));
 export const netWorth = (s) => s.cash + s.shelf.reduce((a, it) => a + trueValue(it), 0);
@@ -67,24 +58,63 @@ export function makeItem(rng, state, tier = null) {
   return it;
 }
 
-export function makeCustomer(rng, state) {
-  const genuine = state.shelf.filter((it) => it.shown && !it.fake); // 사는 손님은 진열 중인 물건만 봐요
-  const c = pick(rng, CUSTOMERS);
-  const interior = interiorLevel(state);
-  if (genuine.length && rng() < 0.4) {
-    const item = pick(rng, genuine);
-    const max = round100(trueValue(item) * trendMult(state, item) * rand(rng, 1.1, 1.6) * (1 + 0.05 * (interior - 1)));
-    return { kind: 'buy', who: c, item, max, offer: round100(max * rand(rng, 0.55, 0.75)), patience: 3 };
-  }
+const stockOf = (s) => s.shelf.filter((it) => !it.fake); // 손님은 재고 전체에서 진품만 사러 와요 (진열대 없음)
+const matches = (it, want) => (want.id ? it.id === want.id : it.cat === want.cat);
+
+function makeBuyer(rng, state) {
+  const genuine = stockOf(state); if (!genuine.length) return null;
+  const item = pick(rng, genuine);
+  const max = round100(trueValue(item) * trendMult(state, item) * rand(rng, 1.1, 1.6) * (1 + 0.05 * (interiorLevel(state) - 1)));
+  return { kind: 'buy', who: pick(rng, CUSTOMERS), item, max, offer: round100(max * rand(rng, 0.55, 0.75)), patience: 3 };
+}
+function makeSeller(rng, state) {
   const item = makeItem(rng, state);
   const believed = item.base * item.cond * trendMult(state, item); // 손님은 진품인 줄 알고 있음
   const min = round100(believed * rand(rng, 0.55, 0.85));
   const ask = round100(believed * rand(rng, 1.0, 1.4));
-  return { kind: 'sell', who: c, item, min, ask: Math.max(ask, min), patience: 3 };
+  return { kind: 'sell', who: pick(rng, CUSTOMERS), item, min, ask: Math.max(ask, min), patience: 3 };
+}
+// 수집가: 원하는 물건이 재고에 있을 때만 생겨요. 처음 제안이 정상 시세의 2배
+export function makeCollector(rng, state) {
+  const opts = COLLECTORS.filter((co) => stockOf(state).some((it) => matches(it, co.want)));
+  if (!opts.length) return null;
+  const co = pick(rng, opts);
+  const item = pick(rng, stockOf(state).filter((it) => matches(it, co.want)));
+  const v = trueValue(item);
+  return { kind: 'buy', collector: co, who: { ...pick(rng, CUSTOMERS), role: co.role }, item, offer: round100(v * COLLECTOR_MULT), max: round100(v * COLLECTOR_MULT * 1.15), patience: 3 };
+}
+// 마케팅 도우미: 홍보비를 내면 내일 손님이 늘지만, 사기(scam)면 돈만 잃어요
+export const promoPrice = (s) => round100(Math.min(PROMO.maxPrice, Math.max(PROMO.minPrice, s.cash * PROMO.cashRate)));
+export function makePromo(rng, state) {
+  const scam = rng() < PROMO.scamChance;
+  return { kind: 'promo', who: { ...pick(rng, CUSTOMERS), role: '마케팅 도우미' }, price: promoPrice(state), scam, looksScam: rng() < LOUPE.accuracy[loupeLevel(state)] ? scam : !scam, patience: 3 };
+}
+export function acceptPromo(s, c) {
+  s.cash -= c.price;
+  if (!c.scam) s.bonusCustomers = (s.bonusCustomers || 0) + PROMO.bonus;
+  return { scam: c.scam, bonus: c.scam ? 0 : PROMO.bonus };
+}
+
+export function makeCustomer(rng, state) {
+  if (rng() < 0.4) { const b = makeBuyer(rng, state); if (b) return b; }
+  return makeSeller(rng, state);
 }
 
 export function makeDay(rng, state) {
-  return Array.from({ length: CUSTOMERS_PER_DAY }, () => makeCustomer(rng, state));
+  const n = CUSTOMERS_PER_DAY + (state.bonusCustomers || 0); state.bonusCustomers = 0;
+  const list = Array.from({ length: n }, () => makeCustomer(rng, state));
+  if (state.day >= 2 && rng() < PROMO.dayChance) list[Math.floor(rng() * n)] = makePromo(rng, state);
+  if (rng() < COLLECTOR_CHANCE) {
+    const c = makeCollector(rng, state);
+    if (c) { let i; do { i = Math.floor(rng() * n); } while (list[i].kind === 'promo'); list[i] = c; }
+  }
+  return list;
+}
+// 손님 차례가 왔을 때 상황이 바뀌었을 수 있어요(물건을 이미 팔았거나 돈이 변함). 필요하면 다른 손님으로 바꿔 줘요.
+export function fixCustomer(rng, state, c) {
+  if (c.kind === 'promo') { c.price = promoPrice(state); return c; }
+  if (c.kind === 'buy' && !state.shelf.includes(c.item)) return (c.collector && makeCollector(rng, state)) || makeBuyer(rng, state) || makeSeller(rng, state);
+  return c;
 }
 
 // 흥정: 결과 {status:'deal'|'counter'|'leave', price?, msg}

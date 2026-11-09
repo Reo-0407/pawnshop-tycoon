@@ -22,6 +22,7 @@ for kind in ('customers', 'items'):
         a = im.getchannel('A').point(lambda v: 0 if v < 90 else 255 if v > 200 else v)  # 번진 반투명 자국 정리
         im.putalpha(a)
         trim_square(im, 384).save(out, optimize=True); print('ok', out.name, flush=True)
-bg = ROOT / 'assets/scene/bg.raw.png'
-if bg.exists():
-    Image.open(bg).convert('RGB').resize((1024, 576), Image.LANCZOS).save(ROOT / 'assets/scene/bg.png', optimize=True); print('ok bg')
+for name in ('bg', 'title'):
+    raw = ROOT / f'assets/scene/{name}.raw.png'
+    if raw.exists():
+        Image.open(raw).convert('RGB').resize((1024, 576), Image.LANCZOS).save(ROOT / f'assets/scene/{name}.png', optimize=True); print('ok', name)

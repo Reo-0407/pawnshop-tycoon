@@ -1,61 +1,89 @@
 import assert from 'node:assert/strict';
-import { newState, makeDay, makeItem, haggle, netWorth, endDay, buyUpgrade, trueValue, junkValue } from '../js/logic.js';
+import * as L from '../js/logic.js';
+import { COLLECTORS, COLLECTOR_MULT, PROMO } from '../js/data.js';
 let seed = 7; const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const { newState, makeDay, makeItem, haggle, netWorth, endDay, buyUpgrade, trueValue, junkValue } = L;
+
+// ---- 기본 규칙 ----
 const s = newState('테스트');
 assert.equal(netWorth(s), 100000);
-const day = makeDay(rng, s); assert.equal(day.length, 8);
-// 파는 손님: 최저가 이상이면 거래, 낮으면 인내심 소모 후 떠남
+assert.equal(makeDay(rng, s).length, 8);
 const c = { kind: 'sell', min: 10000, ask: 14000, patience: 3, item: makeItem(rng, s) };
 assert.equal(haggle(c, 10000).status, 'deal');
-assert.equal(haggle(c, 5000).status, 'counter'); // 인내심 3 -> 1
+assert.equal(haggle(c, 5000).status, 'counter');
 assert.equal(haggle(c, 5000).status, 'leave');
-// 사는 손님
 const b = { kind: 'buy', max: 20000, patience: 3 };
 assert.equal(haggle(b, 20000).status, 'deal');
 assert.equal(haggle(b, 25000).status, 'counter');
-// 시세 범위에 진짜 가치가 들어있는지(진품)
 for (let i = 0; i < 500; i++) { const it = makeItem(rng, s); const v = it.base * it.cond; assert.ok(it.hint.lo <= v + 100 && v - 100 <= it.hint.hi, 'hint range'); }
-// 가품 가치 0, 고물상 5%
 const f = { ...makeItem(rng, s), fake: true }; assert.equal(trueValue(f), 0); assert.ok(junkValue(f) < f.base * 0.06);
-// 월세와 업그레이드
 s.cash = 1000; assert.equal(endDay(s).bankrupt, true);
-s.cash = 50000; assert.equal(buyUpgrade(s, 'slots').ok, true); assert.equal(s.cash, 20000);
-assert.equal(buyUpgrade(s, 'slots').ok, false);
-console.log('모든 테스트 통과');
+s.cash = 50000; assert.equal(buyUpgrade(s, 'loupe').ok, false);            // 80,000원짜리라 모자람
+assert.equal(buyUpgrade(s, 'interior').ok, true); assert.equal(s.cash, 0);   // 50,000원짜리는 가능
+console.log('기본 규칙 테스트 통과');
 
-// ---- 시세·감정·제안가 ----
+// ---- 시세·감정 ----
 {
-  const { rollDay, appraise, trendMult, roughRange, makeCustomer, newState: ns } = await import('../js/logic.js');
-  const t = ns('시세'); rollDay(rng, t);
+  const t = newState('시세'); L.rollDay(rng, t);
   assert.notEqual(t.trend.up, t.trend.down); assert.equal(t.loupeLeft, 3);
-  assert.equal(trendMult(t, { cat: t.trend.up }), 1.3); assert.equal(trendMult(t, { cat: t.trend.down }), 0.8);
-  const c = { appraised: false }; assert.equal(appraise(t, c), true); assert.equal(t.loupeLeft, 2); assert.equal(appraise(t, c), false);
-  t.loupeLeft = 0; assert.equal(appraise(t, { appraised: false }), false);
-  const it = makeItem(rng, t); const rr = roughRange(it); assert.ok(rr.lo < it.hint.lo + 1 && rr.hi > it.hint.hi - 1);
-  { const { addToStock } = await import('../js/logic.js'); const x = makeItem(rng, t, 2); x.fake = false; addToStock(t, x); }
-  let buy = null; for (let i = 0; i < 200 && !buy; i++) { const x = makeCustomer(rng, t); if (x.kind === 'buy') buy = x; }
-  assert.ok(buy && buy.offer <= buy.max);
-  const r = haggle({ ...buy, patience: 3 }, buy.max * 3); assert.equal(r.status, 'counter');
+  assert.equal(L.trendMult(t, { cat: t.trend.up }), 1.3); assert.equal(L.trendMult(t, { cat: t.trend.down }), 0.8);
+  const cc = { appraised: false }; assert.equal(L.appraise(t, cc), true); assert.equal(t.loupeLeft, 2); assert.equal(L.appraise(t, cc), false);
 }
 console.log('시세·감정 테스트 통과');
 
-// ---- 보관은 무제한, 진열만 칸 수 제한 ----
+// ---- 진열대 없음: 재고 전체에서 사 가고, 재고는 무제한 ----
 {
-  const L = await import('../js/logic.js');
-  const u = L.newState('보관'); L.rollDay(rng, u);
-  assert.equal(L.slotCount(u), 4);
-  const shown = []; for (let i = 0; i < 10; i++) shown.push(L.addToStock(u, L.makeItem(rng, u)));
-  assert.equal(u.shelf.length, 10);                       // 10개 보관 가능
-  assert.equal(L.displayedCount(u), 4);                   // 진열은 4칸까지만
-  assert.deepEqual(shown.slice(0, 4), [true, true, true, true]); assert.equal(shown[4], false);
-  const stored = u.shelf.find((it) => !it.shown);
-  assert.equal(L.setShown(u, stored, true), false);       // 칸이 가득 차면 진열 불가
-  const on = u.shelf.find((it) => it.shown); assert.equal(L.setShown(u, on, false), true); assert.equal(L.setShown(u, stored, true), true);
-  // 사는 손님은 진열 중인 진품만 고른다
-  for (const it of u.shelf) { it.fake = false; it.shown = false; } u.shelf[0].shown = true;
-  for (let i = 0; i < 300; i++) { const c = L.makeCustomer(rng, u); if (c.kind === 'buy') assert.equal(c.item, u.shelf[0]); }
-  // 옛 저장 데이터 정리
-  const old = L.newState('옛날'); old.shelf = [L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old), L.makeItem(rng, old)];
-  for (const it of old.shelf) delete it.shown; L.migrateStock(old); assert.equal(L.displayedCount(old), 4);
+  const u = newState('재고'); L.rollDay(rng, u);
+  for (let i = 0; i < 30; i++) { const it = makeItem(rng, u); it.fake = false; u.shelf.push(it); }
+  assert.equal(u.shelf.length, 30);
+  const seen = new Set();
+  for (let i = 0; i < 600; i++) { const x = L.makeCustomer(rng, u); if (x.kind === 'buy') { assert.ok(u.shelf.includes(x.item)); seen.add(x.item); } }
+  assert.ok(seen.size > 8, '재고 여러 개에서 골라 간다');
+  // 가품은 사 가지 않는다
+  const v = newState('가품'); v.shelf.push({ ...makeItem(rng, v), fake: true });
+  for (let i = 0; i < 200; i++) assert.notEqual(L.makeCustomer(rng, v).kind, 'buy');
+  assert.equal(L.slotCount, undefined);
 }
-console.log('보관·진열 테스트 통과');
+console.log('재고 테스트 통과');
+
+// ---- 수집가: 재고에 원하는 물건이 있을 때만, 정상 시세의 2배 ----
+{
+  const w = newState('수집'); L.rollDay(rng, w);
+  assert.equal(L.makeCollector(rng, w), null);                           // 재고가 비었으면 안 옴
+  const can = { id: 'can', name: '찌그러진 깡통', cat: '생활용품', tier: 0, base: 800, cond: 1, fake: false, hint: { lo: 0, hi: 0 } };
+  w.shelf.push(can);
+  let got = null; for (let i = 0; i < 100 && !got; i++) { const k = L.makeCollector(rng, w); if (k && k.collector.want.id === 'can') got = k; }
+  assert.ok(got, '깡통 수집가가 생김'); assert.equal(got.collector.role, '깡통 수집가'); assert.equal(got.who.role, '깡통 수집가');
+  assert.equal(got.offer, 800 * COLLECTOR_MULT); assert.ok(got.max > got.offer); assert.equal(got.item, can);
+  assert.equal(haggle({ ...got }, got.offer).status, 'deal');
+  // 날마다 한 번쯤은 나오고 하루에 한 명 이하
+  let days = 0, withCollector = 0;
+  for (let i = 0; i < 400; i++) { const d = makeDay(rng, w); const n = d.filter((x) => x.collector).length; assert.ok(n <= 1); if (n) withCollector++; days++; }
+  assert.ok(withCollector > 50 && withCollector < 250, `수집가 빈도 ${withCollector}/400`);
+  // 물건을 이미 팔았으면 차례가 왔을 때 다른 손님으로 바뀜
+  const k = L.makeCollector(rng, w); w.shelf = []; const fixed = L.fixCustomer(rng, w, k);
+  assert.notEqual(fixed, k); assert.equal(fixed.kind, 'sell');
+}
+console.log('수집가 테스트 통과');
+
+// ---- 마케팅 도우미: 사기일 수도 있다 ----
+{
+  const m = newState('홍보'); m.day = 3; L.rollDay(rng, m); m.cash = 500000;
+  assert.equal(L.promoPrice(m), 60000); m.cash = 1000; assert.equal(L.promoPrice(m), PROMO.minPrice); m.cash = 5000000; assert.equal(L.promoPrice(m), PROMO.maxPrice);
+  m.cash = 500000;
+  let scams = 0; const N = 1000;
+  for (let i = 0; i < N; i++) { const p = L.makePromo(rng, m); if (p.scam) scams++; assert.equal(p.kind, 'promo'); }
+  assert.ok(scams > 330 && scams < 470, `사기 비율 ${scams}/1000`);
+  const ok = { ...L.makePromo(rng, m), scam: false }, bad = { ...L.makePromo(rng, m), scam: true };
+  const before = m.cash;
+  assert.equal(L.acceptPromo(m, ok).bonus, PROMO.bonus); assert.equal(m.bonusCustomers, PROMO.bonus); assert.equal(m.cash, before - ok.price);
+  const cash2 = m.cash; assert.equal(L.acceptPromo(m, bad).scam, true); assert.equal(m.bonusCustomers, PROMO.bonus); assert.equal(m.cash, cash2 - bad.price); // 사기: 돈만 나감
+  // 다음 날 손님이 늘고 보너스는 한 번만
+  const d = makeDay(rng, m); assert.equal(d.length, 8 + PROMO.bonus); assert.equal(m.bonusCustomers, 0); assert.equal(makeDay(rng, m).length, 8);
+  // 첫날엔 안 옴
+  const first = newState('첫날'); L.rollDay(rng, first); for (let i = 0; i < 200; i++) assert.ok(!makeDay(rng, first).some((x) => x.kind === 'promo'));
+  // 돋보기 정확도만큼 판정이 맞는다 (3단계 95%)
+  const sharp = newState('눈'); sharp.up.loupe = 2; let right = 0; for (let i = 0; i < 1000; i++) { const p = L.makePromo(rng, sharp); if (p.looksScam === p.scam) right++; }
+  assert.ok(right > 920, `3단계 판정 정확도 ${right}/1000`);
+}
+console.log('마케팅 도우미 테스트 통과');

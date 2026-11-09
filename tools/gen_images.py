@@ -28,6 +28,7 @@ ITEMS = {
 ANIMALS = {'cat': 'cat', 'dog': 'dog', 'rabbit': 'rabbit', 'bear': 'brown bear', 'fox': 'fox',
            'panda': 'panda', 'frog': 'frog', 'lion': 'lion', 'owl': 'owl', 'penguin': 'penguin'}
 SCENE = {
+    'title': ('cozy cartoon pawn shop storefront exterior at golden dusk, wooden shop sign with golden balls hanging, warm glowing window full of antiques, cobblestone street, no people, no text, game title screen background', 1024, 576),
     'bg': ('cozy cartoon pawn shop interior, wooden shelves full of antiques on the back wall, warm lamp light, wooden floor, empty room, no people, no counter, game background', 1024, 576),
 }
 
