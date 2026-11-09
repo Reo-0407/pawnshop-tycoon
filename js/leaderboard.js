@@ -2,7 +2,10 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 export const boardEnabled = () => Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const headers = () => ({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' });
+// 새 형식 키(sb_publishable_...)는 JWT가 아니라서 apikey 헤더로만 보내요. 옛 형식(anon JWT)은 Authorization 도 같이.
+const headers = () => (SUPABASE_ANON_KEY.startsWith('sb_')
+  ? { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
+  : { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' });
 
 export async function submitScore(state, worth) {
   if (!boardEnabled()) return { ok: false, reason: 'off' };
