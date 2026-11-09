@@ -1,19 +1,23 @@
-import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT } from './data.js';
-import * as G from './logic.js';
-import { submitScore, fetchTop, boardEnabled } from './leaderboard.js';
+import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT } from './data.js?v=12';
+import * as G from './logic.js?v=12';
+import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 const won = (n) => `${Math.round(n).toLocaleString()}원`;
 const signed = (n) => `${n >= 0 ? '+' : '-'}${won(Math.abs(n))}`;
 const man = (n) => { n = Math.round(n); const m = Math.floor(n / 10000), r = n % 10000; return m ? `${m.toLocaleString()}만${r ? ` ${r.toLocaleString()}` : ''} 원` : `${n.toLocaleString()} 원`; };
-const SAVE_KEY = 'pawn-tycoon-v1';
+const OLD_KEY = 'pawn-tycoon-v1', LAST_KEY = 'pawn-last-nick';
+const saveKey = (n) => `pawn-save:${n}`, secretKey = (n) => `pawn-secret:${n}`;
 let S = null;     // 진행 상태
 let queue = [];   // 오늘 남은 손님
 let cur = null;   // 현재 손님
 let total = 0;
 
-const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {} };
-const load = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } };
+const save = () => { try { localStorage.setItem(saveKey(S.nick), JSON.stringify(S)); localStorage.setItem(secretKey(S.nick), S.secret); localStorage.setItem(LAST_KEY, S.nick); } catch {} };
+const load = (nick) => { try { let v = JSON.parse(localStorage.getItem(saveKey(nick))); if (!v) { const old = JSON.parse(localStorage.getItem(OLD_KEY)); if (old && old.nick === nick) v = old; } return v; } catch { return null; } };
+const lastNick = () => { try { return localStorage.getItem(LAST_KEY) || (JSON.parse(localStorage.getItem(OLD_KEY)) || {}).nick || ''; } catch { return ''; } };
+// 비밀키는 닉네임별로 따로 기억해요: 파산 후 다시 시작해도 순위표에서 내 닉네임이 잠기지 않게
+function freshState(nick) { const st = G.newState(nick); try { const k = localStorage.getItem(secretKey(nick)); if (k) st.secret = k; } catch {} return st; }
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2200); }
 function show(name) { for (const s of ['title', 'shop', 'night', 'over']) $('screen-' + s).hidden = s !== name; $('top').hidden = name === 'title'; document.body.classList.toggle('title', name === 'title'); }
 
@@ -38,13 +42,17 @@ function renderTrend() {
 }
 
 // ---------- 하루 / 손님 ----------
-function startDay() {
-  G.rollDay(Math.random, S);
-  queue = G.makeDay(Math.random, S); total = queue.length; cur = null; save(); show('shop'); renderTrend(); nextCustomer();
+function startDay(resume = false) {
+  if (resume) { queue = G.makeDay(Math.random, S, S.remain); total = S.dayTotal || queue.length; } // 하루 도중 새로고침: 돋보기 횟수·시세는 그대로
+  else { G.rollDay(Math.random, S); queue = G.makeDay(Math.random, S); total = queue.length; S.dayTotal = total; S.remain = total; S.phase = 'day'; }
+  cur = null; save(); show('shop'); renderTrend(); nextCustomer();
 }
+let busy = false; // 손님이 걸어 나가는 동안 '다음 손님'을 또 눌러도 한 명만 넘어가게
 function nextCustomer() {
+  if (busy) return;
   const raw = queue.shift();
   if (!raw) { cur = null; return endOfDay(); }
+  busy = true;
   const next = G.fixCustomer(Math.random, S, raw); // 그 사이 재고가 바뀌었으면 손님을 바꿔 줘요
   const spr = $('customerSprite');
   const go = () => {
@@ -66,7 +74,7 @@ function nextCustomer() {
     }
     t.className = 'tableitem'; void t.offsetWidth; t.className = 'tableitem drop';
     if (cur.kind !== 'promo') initPrice();
-    render(); refreshTop();
+    render(); refreshTop(); busy = false;
     setTimeout(() => { if (cur === next) $('bubble').hidden = false; }, 700);
   };
   if (cur && spr.classList.contains('idle')) { spr.className = 'customer leave'; $('bubble').hidden = true; setTimeout(go, 450); } else go();
@@ -194,6 +202,8 @@ function onAppraise() {
   else say(cur.item.hint.looksReal ? '(돋보기로 보니 진품 같아요!)' : '(돋보기로 보니 뭔가 수상한데요...)');
 }
 function finish(result, msg) {
+  if (cur.done) return;
+  S.remain = Math.max(0, (S.remain ?? 1) - 1); save(); // 몇 명 남았는지 저장해 두면 새로고침해도 이어서 해요
   cur.done = true; cur.result = result; if (msg) say(msg);
   $('tableItem').className = 'tableitem take'; $('priceTag').textContent = ''; render();
 }
@@ -236,15 +246,24 @@ function slot(it) {
 
 // ---------- 밤: 정산과 업그레이드 ----------
 async function endOfDay() {
-  const { rent, bankrupt } = G.endDay(S);
+  const info = G.endDay(S);
+  S.remain = null; S.phase = 'night'; S.lastNight = { rent: info.rent, soldN: info.sold.length, soldFor: info.soldFor };
   refreshTop(); save();
-  if (bankrupt) { $('overMsg').textContent = `월세 ${won(rent)}을 내지 못했어요. 최종 ${S.day}일차.`; localStorage.removeItem(SAVE_KEY); return show('over'); }
-  $('nightTitle').textContent = `🌙 ${S.day - 1}일차 마감`;
-  $('nightSummary').innerHTML = `월세 <b>-${won(rent)}</b><br>가진 돈 <b>${won(S.cash)}</b><br>재고 가치 <b>${won(G.netWorth(S) - S.cash)}</b><br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>${S.bonusCustomers ? `<br>📣 내일 손님 <b>+${S.bonusCustomers}명</b>` : ''}`;
-  renderUpgrades(); show('night');
+  if (info.bankrupt) {
+    $('overMsg').textContent = `월세 ${won(info.rent)}을 내지 못했어요. 재고를 다 팔아도 모자랐어요. 최종 ${S.day}일차.`;
+    try { localStorage.removeItem(saveKey(S.nick)); localStorage.removeItem(OLD_KEY); } catch {} // 비밀키는 남겨 둬요
+    return show('over');
+  }
+  renderNight(); show('night');
   const r = await submitScore(S, G.netWorth(S));
   const el = $('subStatus'); if (!el) return;
-  el.textContent = r.ok ? '· 순위에 올렸어요 ✔' : r.reason === 'nick_taken' ? '· 이미 쓰는 닉네임이에요 (순위 미등록)' : r.reason === 'off' ? '' : '· 순위 전송 실패';
+  el.textContent = r.ok ? '· 순위에 올렸어요 ✔' : r.reason === 'nick_taken' ? '· 이미 쓰는 닉네임이에요 (순위 미등록)' : r.reason === 'off' ? '' : r.reason === 'rejected' ? '· 이번 기록은 순위에 반영되지 않았어요' : '· 순위 전송 실패';
+}
+function renderNight() {
+  const n = S.lastNight || { rent: 0, soldN: 0, soldFor: 0 };
+  $('nightTitle').textContent = `🌙 ${S.day - 1}일차 마감`;
+  $('nightSummary').innerHTML = `월세 <b>-${won(n.rent)}</b>${n.soldN ? `<br><span class="small">현금이 모자라서 재고 ${n.soldN}개를 고물상에 ${won(n.soldFor)}에 팔았어요</span>` : ''}<br>가진 돈 <b>${won(S.cash)}</b><br>재고 가치 <b>${won(G.netWorth(S) - S.cash)}</b><br>총 재산 <b>${won(G.netWorth(S))}</b> <span id="subStatus" class="small"></span>${S.bonusCustomers ? `<br>📣 내일 손님 <b>+${S.bonusCustomers}명</b>` : ''}`;
+  renderUpgrades();
 }
 function renderUpgrades() {
   const box = $('upgrades'); box.innerHTML = '';
@@ -270,23 +289,28 @@ async function openBoard() {
 }
 
 // ---------- 시작 ----------
-function begin(state) { S = state; S.loupeLeft ??= 0; S.trend ??= null; S.bonusCustomers ??= 0; startDay(); }
+function begin(state) {
+  S = state; S.loupeLeft ??= 0; S.trend ??= null; S.bonusCustomers ??= 0; refreshTop();
+  if (S.phase === 'night') { renderNight(); show('night'); }  // 정산 화면에서 새로고침했으면 거기로
+  else if (S.remain != null) startDay(true);                   // 하루 도중이면 이어서
+  else startDay();
+}
 $('btnStart').onclick = () => {
   const nick = $('nickInput').value.trim();
   if (!nick) return toast('닉네임을 입력하세요');
-  const saved = load();
-  begin(saved && saved.nick === nick ? saved : G.newState(nick));
+  const saved = load(nick);
+  begin(saved && saved.nick === nick ? saved : freshState(nick));
 };
 $('btnRestart').onclick = () => { $('nickInput').value = S.nick; show('title'); };
 $('btnNext').onclick = nextCustomer;
 $('btnOffer').onclick = onOffer; $('btnDecline').onclick = onDecline; $('btnAppraise').onclick = onAppraise;
-$('btnNextDay').onclick = startDay;
+$('btnNextDay').onclick = () => startDay();
 $('btnBoard').onclick = $('btnTitleBoard').onclick = openBoard;
 $('btnCloseBoard').onclick = () => ($('modal').hidden = true);
 $('btnShelf').onclick = () => { renderShelf(); $('shelfModal').hidden = false; };
 $('btnCloseShelf').onclick = () => ($('shelfModal').hidden = true);
 $('price').addEventListener('input', updatePreview);
 $('price').addEventListener('keydown', (e) => { if (e.key === 'Enter') onOffer(); });
-const prev = load(); if (prev) $('nickInput').value = prev.nick;
+{ const n = lastNick(); if (n) $('nickInput').value = n; }
 show('title');
 window.__pawn = { get S() { return S; } };

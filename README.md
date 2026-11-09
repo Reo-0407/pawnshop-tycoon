@@ -17,3 +17,10 @@ node tests/logic.test.mjs     # 규칙 테스트
 
 ## 화면
 태블릿 가로: 장면 위에 오른쪽 상담 패널 / 세로·폰: 장면 아래에 패널. 위 칩: 일차·손님·현금·돋보기 횟수·재고·순위.
+
+## 고쳐서 올릴 때
+```
+node tests/logic.test.mjs            # 규칙 테스트
+python tools/bump_version.py         # 파일 버전(?v=N)을 한꺼번에 +1: 브라우저가 옛 파일과 새 파일을 섞어 쓰다 깨지는 걸 막아요
+git add -A && git commit -m "..." && git push
+```

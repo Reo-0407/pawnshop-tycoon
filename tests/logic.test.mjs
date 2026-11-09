@@ -107,3 +107,26 @@ console.log('마케팅 도우미 테스트 통과');
   const r2 = haggle(k, 35000); if (r2.status === 'counter') assert.ok(r2.price >= r1.price);
 }
 console.log('흥정 방향 테스트 통과');
+
+// ---- 버그 수정 모음 ----
+{
+  // 파는 손님에게 요구가보다 훨씬 많이 적어도 요구가만 낸다 / 사는 손님은 자기 제안가보다 싸게 사지 않는다
+  assert.equal(haggle({ kind: 'sell', min: 10000, ask: 14000, patience: 3 }, 1400000).price, 14000);
+  assert.equal(haggle({ kind: 'sell', min: 10000, ask: 14000, patience: 3 }, 12000).price, 12000);
+  assert.equal(haggle({ kind: 'buy', max: 40000, offer: 30000, patience: 3 }, 20000).price, 30000);
+  assert.equal(haggle({ kind: 'buy', max: 40000, offer: 30000, patience: 3 }, 35000).price, 35000);
+
+  // 월세: 현금이 모자라면 싼 물건부터 팔아서 내고, 다 팔아도 모자랄 때만 파산
+  const mk = (cash, items) => { const z = newState('월세'); z.cash = cash; z.shelf = items.map((v) => ({ id: 'x', name: 'x', base: v, cond: 1, fake: false })); return z; };
+  let z = mk(500, [100000, 20000, 6000]);                       // 월세 3,000원: 500 - 3,000 = -2,500
+  let r = L.endDay(z); assert.equal(r.bankrupt, false); assert.equal(r.sold.length, 1);   // 6,000원짜리 하나(고물상 3,000원)만 팔면 됨
+  assert.equal(z.shelf.length, 2); assert.equal(z.cash, 500 - 3000 + 3000); assert.equal(z.day, 2);
+  z = mk(0, [2000]);                                           // 다 팔아도(1,000원) 3,000원 월세 못 냄
+  r = L.endDay(z); assert.equal(r.bankrupt, true); assert.equal(z.day, 1);
+  z = mk(10000, [100000]); r = L.endDay(z); assert.equal(r.sold.length, 0); assert.equal(z.cash, 7000);
+
+  // 이어하기: count 를 주면 그 수만큼만, 보너스는 건드리지 않는다
+  const q = newState('이어'); q.bonusCustomers = 4; L.rollDay(rng, q);
+  assert.equal(makeDay(rng, q, 3).length, 3); assert.equal(q.bonusCustomers, 4); assert.equal(makeDay(rng, q, 0).length, 0);
+}
+console.log('버그 수정 테스트 통과');

@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js';
+import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=12';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -100,7 +100,9 @@ export function makeCustomer(rng, state) {
   return makeSeller(rng, state);
 }
 
-export function makeDay(rng, state) {
+// count 를 주면 하루 도중에 이어 하는 거예요(보너스·특별 손님은 이미 정해졌으니 다시 뽑지 않아요)
+export function makeDay(rng, state, count) {
+  if (count !== undefined) return Array.from({ length: count }, () => makeCustomer(rng, state));
   const n = CUSTOMERS_PER_DAY + (state.bonusCustomers || 0); state.bonusCustomers = 0;
   const list = Array.from({ length: n }, () => makeCustomer(rng, state));
   if (state.day >= 2 && rng() < PROMO.dayChance) list[Math.floor(rng() * n)] = makePromo(rng, state);
@@ -122,7 +124,7 @@ export function fixCustomer(rng, state, c) {
 export function haggle(c, offer) {
   c.rounds = (c.rounds || 0) + 1;
   if (c.kind === 'sell') { // 플레이어가 사는 쪽
-    if (offer >= c.min) return { status: 'deal', price: offer, msg: '좋아요! 그 가격에 팔게요.' };
+    if (offer >= c.min) return { status: 'deal', price: Math.min(offer, c.ask ?? offer), msg: '좋아요! 그 가격에 팔게요.' }; // 요구가보다 더 낼 필요는 없어요
     c.patience -= offer < c.min * 0.6 ? 2 : 1;
     if (c.patience <= 0) return { status: 'leave', msg: '너무 박하네요! 안 팔아요!' };
     const floor = round100(c.min);
@@ -131,7 +133,7 @@ export function haggle(c, offer) {
     return { status: 'counter', price: cp, msg: `음... ${cp.toLocaleString()}원이면 팔게요.` };
   }
   // 플레이어가 파는 쪽
-  if (offer <= c.max) return { status: 'deal', price: offer, msg: '좋아요! 살게요.' };
+  if (offer <= c.max) return { status: 'deal', price: Math.max(offer, c.offer ?? offer), msg: '좋아요! 살게요.' }; // 손님이 먼저 부른 값보다 싸게 팔 필요는 없어요
   c.patience -= offer > c.max * 1.4 ? 2 : 1;
   if (c.patience <= 0) return { status: 'leave', msg: '너무 비싸요! 다른 데 갈래요!' };
   const cp = Math.min(c.max, Math.max(c.offer, round100(c.max * Math.min(1, 0.9 + 0.05 * c.rounds)))); // 현재 제안가보다 높게, 최대치를 넘지 않게
@@ -144,9 +146,16 @@ export function junkValue(it) { return it.fake ? round100(it.base * 0.05) : roun
 export function endDay(s) {
   const rent = RENT(interiorLevel(s));
   s.cash -= rent;
-  const bankrupt = s.cash < 0;
+  const sold = []; let soldFor = 0;
+  if (s.cash < 0) { // 현금이 모자라면 싼 물건부터 고물상에 팔아서 월세를 내요
+    for (const it of [...s.shelf].sort((a, b) => junkValue(a) - junkValue(b))) {
+      if (s.cash >= 0) break;
+      const v = junkValue(it); s.cash += v; soldFor += v; s.shelf.splice(s.shelf.indexOf(it), 1); sold.push(it);
+    }
+  }
+  const bankrupt = s.cash < 0; // 재고를 다 팔아도 모자랄 때만 파산
   if (!bankrupt) s.day += 1;
-  return { rent, bankrupt };
+  return { rent, bankrupt, sold, soldFor };
 }
 
 export function buyUpgrade(s, key) {
