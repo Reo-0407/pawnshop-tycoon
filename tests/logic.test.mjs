@@ -163,3 +163,42 @@ console.log('버그 수정 테스트 통과');
   for (let i = 0; i < 100; i++) { const z = newState('가품'); z.day = 5; z.pledges = [{ item: { ...pw.item, fake: true }, loan: 1000, repay: 1200, due: 5 }]; assert.equal(L.settlePledges(rng, z)[0].kind, 'forfeit'); }
 }
 console.log('전당포 대출 테스트 통과');
+
+// ---- 도난품·경찰 ----
+{
+  const { STOLEN } = await import('../js/data.js');
+  const q = newState('장물'); L.rollDay(rng, q);
+  // 1~2일차엔 장물이 안 오고, 3일차부터 8% 안팎이다
+  q.day = 2; for (let i = 0; i < 500; i++) assert.ok(!L.makeCustomer(rng, q).stolen);
+  q.day = 3; let st = 0, sellers = 0, cheap = 0; for (let i = 0; i < 4000; i++) { const x = L.makeCustomer(rng, q); if (x.kind === 'sell') sellers++; if (x.stolen) { st++; assert.equal(x.kind, 'sell'); assert.equal(x.item.fake, false); if (x.ask < x.item.base * x.item.cond * 0.75) cheap++; } }
+  assert.ok(st > 220 && st < 420, `장물 빈도 ${st}/4000`); assert.equal(cheap, st, '장물은 시세보다 훨씬 싸다');
+  // 장물 의심 표시: 장물이면 돋보기 정확도만큼, 보통 손님은 아주 가끔만 오해
+  q.up.loupe = 2; let hit = 0, fp = 0; const nn = 3000;
+  for (let i = 0; i < nn; i++) { if (L.makeSeller(rng, q, true).looksStolen) hit++; if (L.makeSeller(rng, q, false).looksStolen) fp++; }
+  assert.ok(hit / nn > 0.92 && fp / nn < 0.03, `의심 표시 적중 ${hit}/${nn} 오탐 ${fp}/${nn}`);
+}
+{
+  // 장물을 사면 표시가 붙고 경찰 날짜가 정해진다
+  const q = newState('경찰'); q.day = 4; L.rollDay(rng, q);
+  let c; do { c = L.makeCustomer(rng, q); } while (!c.stolen);
+  L.acquire(q, c, 10000, () => 0); assert.equal(c.item.stolen, true); assert.equal(c.item.policeDay, 5); assert.equal(q.shelf.length, 1);
+  L.acquire(q, { ...c, item: { ...c.item } }, 1, () => 0.99); assert.equal(q.shelf[1].policeDay, 6);
+  // 날짜가 안 됐으면 경찰이 없고, 되면 하루에 한 번 나온다
+  q.shelf[1].stolen = false; q.day = 4; assert.equal(L.makePolice(rng, q), null); assert.ok(!makeDay(rng, q).some((x) => x.kind === 'police'));
+  q.day = 5; const po = L.makePolice(rng, q); assert.equal(po.kind, 'police'); assert.deepEqual(po.items, [q.shelf[0]]);
+  const day = makeDay(rng, q); assert.equal(day.filter((x) => x.kind === 'police').length, 1); assert.equal(day.length, 9);
+  // 그 사이 장물을 팔았으면 다른 손님으로 바뀐다
+  const stock = q.shelf.splice(0, 1); const fixed = L.fixCustomer(rng, q, po); assert.notEqual(fixed.kind, 'police'); q.shelf.unshift(...stock);
+}
+{
+  // 협조하면 물건만 잃는다 / 모른 척하면 40% 넘어가고, 들키면 압수 + 벌금(현금 한도 안에서)
+  const mk = () => { const q = newState('조사'); q.day = 6; q.cash = 100000; const it = { id: 'x', name: 'x', base: 100000, cond: 1, fake: false, stolen: true, policeDay: 6 }; q.shelf = [it]; return [q, L.makePolice(rng, q)]; };
+  let [q, po] = mk(); let r = L.resolvePolice(rng, q, po, true); assert.equal(r.seized.length, 1); assert.equal(r.fine, 0); assert.equal(q.shelf.length, 0); assert.equal(q.cash, 100000);
+  let esc = 0, caught = 0; const N = 2000;
+  for (let i = 0; i < N; i++) { [q, po] = mk(); r = L.resolvePolice(rng, q, po, false);
+    if (r.escaped) { esc++; assert.equal(q.shelf.length, 1); assert.equal(q.shelf[0].stolen, false); assert.equal(q.cash, 100000); }
+    else { caught++; assert.equal(q.shelf.length, 0); assert.equal(r.fine, 50000); assert.equal(q.cash, 50000); } }
+  assert.ok(esc > 700 && esc < 900, `모른 척 성공 ${esc}/${N}`);
+  [q, po] = mk(); q.cash = 1000; q.shelf[0].base = 1000; r = { ...L.resolvePolice(() => 0.99, q, po, false) }; assert.ok(r.fine <= 1000 && q.cash >= 0, '벌금은 가진 돈을 넘지 않는다');
+}
+console.log('도난품·경찰 테스트 통과');

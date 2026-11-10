@@ -72,6 +72,8 @@ export const COLLECTOR_CHANCE = 0.3;  // 하루에 올 확률 (재고에 맞는 
 export const PROMO = { dayChance: 0.45, scamChance: 0.4, bonus: 4, minPrice: 5000, maxPrice: 300000, cashRate: 0.12 };
 // 전당포 대출: 물건을 맡기고 돈을 빌려가요. 기한 안에 찾아가면 원금+이자를 받고, 안 찾아가면 담보가 내 재고가 돼요
 export const LOAN = { chance: 0.15, rate: 0.2, days: 3, redeemChance: 0.6 };
+// 도난품(장물): 아주 싸게 팔려는 수상한 손님. 사면 하루이틀 뒤 경찰이 와요
+export const STOLEN = { chance: 0.08, minDay: 3, policeDelay: [1, 2], bluffChance: 0.4, fineRate: 0.5, minFine: 5000 };
 export const LOUPE_USES = (level) => 1 + 2 * level; // 하루 감정 횟수 (1단계 3회, 3단계 7회)
 export const START_CASH = 100000;
 export const CUSTOMERS_PER_DAY = 8;

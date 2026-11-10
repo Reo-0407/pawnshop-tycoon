@@ -1,6 +1,7 @@
-import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=13';
-import * as G from './logic.js?v=13';
-import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=13';
+import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=14';
+import * as G from './logic.js?v=14';
+import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=14';
+import { play, toggleMute, isMuted } from './sfx.js?v=14';
 
 const $ = (id) => document.getElementById(id);
 const won = (n) => `${Math.round(n).toLocaleString()}원`;
@@ -53,7 +54,7 @@ function showNews() {
   $('newsList').innerHTML = n.map((e) => `<div class="news">${e.kind === 'redeem'
     ? `✅ <b>${e.p.item.name}</b>을(를) 찾아갔어요! 원금+이자 <b>+${won(e.p.repay)}</b>`
     : `⏰ <b>${e.p.item.name}</b>은(는) 기한이 지나 내 재고가 됐어요 (빌려준 돈 ${won(e.p.loan)})${e.p.item.fake ? ' — 가품이었어요 😭' : ''}`}</div>`).join('');
-  $('newsModal').hidden = false; S.news = []; refreshTop(); save();
+  play('news'); $('newsModal').hidden = false; S.news = []; refreshTop(); save();
 }
 let busy = false; // 손님이 걸어 나가는 동안 '다음 손님'을 또 눌러도 한 명만 넘어가게
 function nextCustomer() {
@@ -70,7 +71,11 @@ function nextCustomer() {
     spr.className = 'customer enter';
     spr.onanimationend = () => { if (spr.classList.contains('enter')) spr.className = 'customer idle'; };
     const it = cur.item, t = $('tableItem');
-    if (cur.kind === 'promo') {
+    if (cur.kind === 'police') {
+      play('siren');
+      say(`경찰입니다. 도난 신고된 물건이 이 가게에 들어왔다는 제보가 있어요. ${cur.items.map((x) => x.name).join(', ')}... 확인해 볼게요.`);
+      const sp = document.createElement('span'); sp.textContent = '🚓'; t.replaceChildren(sp);
+    } else if (cur.kind === 'promo') {
       say(`안녕하세요! 마케팅 도우미예요. 홍보비 ${won(cur.price)}만 주시면 내일 손님이 ${PROMO.bonus}명 더 오게 해 드려요!`);
       const sp = document.createElement('span'); sp.textContent = '📣'; t.replaceChildren(sp);
     } else if (cur.collector) {
@@ -82,7 +87,7 @@ function nextCustomer() {
       setPic(t, 'items', it);
     }
     t.className = 'tableitem'; void t.offsetWidth; t.className = 'tableitem drop';
-    if (cur.kind !== 'promo') initPrice();
+    if (cur.kind !== 'promo' && cur.kind !== 'police') initPrice();
     render(); refreshTop(); busy = false;
     setTimeout(() => { if (cur === next) $('bubble').hidden = false; }, 700);
   };
@@ -114,6 +119,7 @@ const stepLabel = (n) => (n >= 10000 ? `${n / 10000}만` : n >= 1000 ? `${n / 10
 
 function updatePreview() {
   if (!cur || cur.done) { $('priceTag').textContent = ''; return; }
+  if (cur.kind === 'police') { $('priceTag').textContent = ''; return; }
   if (cur.kind === 'promo') { $('priceTag').textContent = man(cur.price); return; }
   const p = getPrice(), it = cur.item;
   $('priceTag').textContent = man(p);
@@ -133,16 +139,23 @@ function updatePreview() {
 }
 
 function render() {
-  const c = cur, it = c.item, promo = c.kind === 'promo', pawn = c.kind === 'pawn', sell = c.kind === 'sell' || pawn, done = c.done;
+  const c = cur, it = c.item, promo = c.kind === 'promo', police = c.kind === 'police', pawn = c.kind === 'pawn', sell = c.kind === 'sell' || pawn, done = c.done;
   // 상단: 상태·기분·이름·인내심
-  $('stateTag').textContent = (promo ? '마케팅 제안' : pawn ? '대출 상담' : sell ? '매입 상담' : c.collector ? '수집가 상담' : '판매 상담') + (done ? ` · ${c.result || '종료'}` : promo ? ' · 검토 중' : ' · 흥정 중');
+  $('stateTag').textContent = (police ? '경찰 조사' : promo ? '마케팅 제안' : pawn ? '대출 상담' : sell ? '매입 상담' : c.collector ? '수집가 상담' : '판매 상담') + (done ? ` · ${c.result || '종료'}` : promo ? ' · 검토 중' : police ? ' · 대응 중' : ' · 흥정 중');
   const p = Math.max(c.patience, 0);
-  $('moodTag').textContent = promo ? '수상?' : p >= 3 ? '좋음' : p === 2 ? '보통' : '나쁨';
+  $('moodTag').textContent = police ? '긴장!' : promo ? '수상?' : p >= 3 ? '좋음' : p === 2 ? '보통' : '나쁨';
   $('whoName').textContent = c.who.name; $('whoRole').textContent = c.who.role;
-  $('dots').innerHTML = promo ? '' : '●'.repeat(p) + `<span class="off">${'●'.repeat(3 - p)}</span>`;
-  document.querySelector('.patience').style.visibility = promo ? 'hidden' : '';
+  $('dots').innerHTML = promo || police ? '' : '●'.repeat(p) + `<span class="off">${'●'.repeat(3 - p)}</span>`;
+  document.querySelector('.patience').style.visibility = promo || police ? 'hidden' : '';
   const tags = [];
-  if (promo) {
+  if (police) {
+    const sp = document.createElement('span'); sp.textContent = '🚓'; $('thumb').replaceChildren(sp);
+    $('iname').textContent = '도난품 수색';
+    $('itags').innerHTML = '<span class="tag fake">압수 위험</span>';
+    $('irange').textContent = `대상: ${c.items.map((x) => x.name).join(', ')}`;
+    $('icost').textContent = '순순히 넘기면 물건만 잃어요. 모른 척하면 40%는 넘어가지만 들키면 벌금까지 내요';
+    $('offerLabel').textContent = '걸린 물건 가치'; $('offerVal').textContent = won(c.items.reduce((a, x) => a + G.trueValue(x), 0));
+  } else if (promo) {
     const sp = document.createElement('span'); sp.textContent = '📣'; $('thumb').replaceChildren(sp);
     $('iname').textContent = '홍보 패키지';
     tags.push('<span class="tag">서비스</span>', `<span class="tag up">내일 손님 +${PROMO.bonus}명 (?)</span>`);
@@ -159,6 +172,7 @@ function render() {
     if (c.collector) tags.push(`<span class="tag up">수집가 특가 ×${COLLECTOR_MULT}</span>`);
     if (pawn) tags.push(`<span class="tag up">담보 대출 · ${LOAN.days}일 · 이자 ${Math.round(LOAN.rate * 100)}%</span>`);
     if (mult > 1) tags.push('<span class="tag up">인기 ▲</span>'); else if (mult < 1) tags.push('<span class="tag down">비인기 ▼</span>');
+    if (sell && c.appraised && c.looksStolen) tags.push('<span class="tag fake">장물 의심 ✖</span>');
     if (sell && c.appraised) tags.push(it.hint.looksReal ? '<span class="tag real">진품 같음 ✔</span>' : '<span class="tag fake">가품 같음 ✖</span>');
     $('itags').innerHTML = tags.join('');
     if (sell) {
@@ -181,14 +195,14 @@ function render() {
     for (const f of facs) mb.append(btn(`${sell ? '요구가' : it.cost != null ? '매입가' : '시세'}×${f}`, () => setPrice(base * f)));
   }
   // 버튼들
-  $('negotiate').hidden = done || promo; $('btnNext').hidden = !done; $('btnNext').textContent = queue.length ? '다음 손님' : '하루 마치기';
+  $('negotiate').hidden = done || promo || police; $('btnNext').hidden = !done; $('btnNext').textContent = queue.length ? '다음 손님' : '하루 마치기';
   $('btnAppraise').hidden = !(sell || promo) || done; $('btnOffer').hidden = done; $('btnDecline').hidden = done;
   document.querySelector('.row2').style.display = done ? 'none' : '';
   document.querySelector('.row2').style.gridTemplateColumns = (sell || promo) ? '' : '1fr';
   $('btnAppraise').textContent = c.appraised ? '감정 완료 ✔' : promo ? `수상한 점 찾기 (돋보기 ${S.loupeLeft})` : `감정하기 (돋보기 ${S.loupeLeft})`;
   $('btnAppraise').disabled = c.appraised || S.loupeLeft <= 0;
-  $('btnOffer').textContent = promo ? `맡기기 (${won(c.price)})` : pawn ? '이 금액 대출' : sell ? '이 가격 제안' : '이 가격 요구';
-  $('btnDecline').textContent = promo || pawn ? '거절하기' : sell ? '사지 않기' : '팔지 않기';
+  $('btnOffer').textContent = police ? '순순히 넘기기' : promo ? `맡기기 (${won(c.price)})` : pawn ? '이 금액 대출' : sell ? '이 가격 제안' : '이 가격 요구';
+  $('btnDecline').textContent = police ? '모른 척하기 (40%)' : promo || pawn ? '거절하기' : sell ? '사지 않기' : '팔지 않기';
   updatePreview();
 }
 function btn(label, fn) { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; return b; }
@@ -201,10 +215,17 @@ function canBuy(price) {
 function onPromo() {
   if (S.cash < cur.price) return toast('가진 돈이 모자라요');
   const r = G.acceptPromo(S, cur); save(); refreshTop();
-  if (r.scam) { floatText(`-${won(cur.price)} 😭`); toast('사기였어요! 홍보비만 날렸어요'); finish('사기였어요 😭', '하하, 고마워요! (홍보는... 음... 안 해요)'); }
-  else { floatText(`내일 손님 +${r.bonus}명 📣`); toast(`홍보 성공! 내일 손님이 ${r.bonus}명 더 와요`); finish('홍보 성공 📣', '맡겨 주세요! 내일은 손님이 북적일 거예요!'); }
+  if (r.scam) { play('bad'); floatText(`-${won(cur.price)} 😭`); toast('사기였어요! 홍보비만 날렸어요'); finish('사기였어요 😭', '하하, 고마워요! (홍보는... 음... 안 해요)'); }
+  else { play('good'); floatText(`내일 손님 +${r.bonus}명 📣`); toast(`홍보 성공! 내일 손님이 ${r.bonus}명 더 와요`); finish('홍보 성공 📣', '맡겨 주세요! 내일은 손님이 북적일 거예요!'); }
+}
+function onPolice(cooperate) {
+  const r = G.resolvePolice(Math.random, S, cur, cooperate); save(); refreshTop();
+  if (r.escaped) { play('good'); toast('경찰이 그냥 돌아갔어요!'); finish('넘어감 😅', '흠... 알겠습니다. 이번엔 그냥 가죠. 하지만 지켜보고 있습니다!'); }
+  else if (r.fine) { play('bad'); floatText(`-${won(r.fine)} 🚨`); toast(`들켰어요! 장물 압수 + 벌금 ${won(r.fine)}`); finish('들킴 🚨', `거짓말이군요! ${r.seized.map((x) => x.name).join(', ')} 압수하고 벌금 ${won(r.fine)}입니다!`); }
+  else { play('pay'); toast(`${r.seized.map((x) => x.name).join(', ')}을(를) 경찰에 넘겼어요`); finish('압수', '협조 감사합니다. 물건은 압수하겠습니다.'); }
 }
 function onOffer() {
+  if (cur.kind === 'police') return onPolice(true);
   if (cur.kind === 'promo') return onPromo();
   const offer = getPrice(); if (!(offer > 0)) return toast('가격을 입력하세요');
   if (isSell() && !canBuy(offer)) return;
@@ -228,16 +249,17 @@ function settle(r) {
     if (c.kind === 'pawn') {
       const p = G.lend(S, c, r.price); floatText(`-${won(r.price)} 🔒`);
       toast(`${c.item.name}을(를) 담보로 ${won(r.price)} 대출! ${p.due}일차에 ${won(p.repay)} 받으러 와요`);
-    } else if (c.kind === 'sell') { c.item.cost = r.price; S.cash -= r.price; S.shelf.push(c.item); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요`); }
+    } else if (c.kind === 'sell') { G.acquire(S, c, r.price); floatText(`-${won(r.price)}`); toast(`${c.item.name}을(를) ${won(r.price)}에 샀어요`); }
     else {
       S.cash += r.price; S.shelf = S.shelf.filter((x) => x !== c.item); floatText(`+${won(r.price)} 💰`);
       toast(`${won(r.price)}에 팔았어요! (차익 ${signed(r.price - basis(c.item))})`);
     }
+    play(c.kind === 'buy' ? 'coin' : 'pay');
     save(); refreshTop(); finish('거래 성사 🤝', r.msg + ' 🤝');
-  } else if (r.status === 'leave') finish('손님이 떠남 😤', r.msg + ' 😤');
+  } else if (r.status === 'leave') { play('leave'); finish('손님이 떠남 😤', r.msg + ' 😤'); }
   else { say(r.msg); setPrice(r.price); render(); }  // 역제안 가격을 입력칸에 넣어 한 번에 받아들일 수 있게
 }
-function onDecline() { finish('거절', c2(isSell() ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
+function onDecline() { if (cur.kind === 'police') return onPolice(false); finish('거절', c2(isSell() ? '아쉽네요, 다음에 올게요.' : '그럼 다음에 올게요.')); }
 const c2 = (m) => m;
 
 // ---------- 재고: 개수 제한 없음. 손님은 재고 전체에서 사 가요 ----------
@@ -339,6 +361,10 @@ $('btnCloseBoard').onclick = () => ($('modal').hidden = true);
 $('btnShelf').onclick = () => { renderShelf(); $('shelfModal').hidden = false; };
 $('btnCloseShelf').onclick = () => ($('shelfModal').hidden = true);
 $('btnCloseNews').onclick = () => ($('newsModal').hidden = true);
+const soundLabel = () => ($('btnSound').textContent = isMuted() ? '🔇' : '🔊');
+$('btnSound').onclick = () => { toggleMute(); soundLabel(); play('click'); };
+soundLabel();
+document.addEventListener('click', (e) => { if (e.target.closest('button') && !e.target.closest('#btnSound')) play('click'); });
 $('price').addEventListener('input', updatePreview);
 $('price').addEventListener('keydown', (e) => { if (e.key === 'Enter') onOffer(); });
 { const n = lastNick(); if (n) $('nickInput').value = n; }

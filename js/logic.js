@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, LOAN, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=13';
+import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, LOAN, STOLEN, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=14';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -68,12 +68,16 @@ function makeBuyer(rng, state) {
   const max = round100(trueValue(item) * trendMult(state, item) * rand(rng, 1.1, 1.6) * (1 + 0.05 * (interiorLevel(state) - 1)));
   return { kind: 'buy', who: pick(rng, CUSTOMERS), item, max, offer: round100(max * rand(rng, 0.55, 0.75)), patience: 3 };
 }
-function makeSeller(rng, state) {
-  const item = makeItem(rng, state);
+export function makeSeller(rng, state, stolen = false) {
+  let item = makeItem(rng, state);
+  if (stolen) for (let t = 0; t < 12 && item.fake; t++) item = makeItem(rng, state); // 장물은 진짜 물건이에요
   const believed = item.base * item.cond * trendMult(state, item); // 손님은 진품인 줄 알고 있음
-  const min = round100(believed * rand(rng, 0.55, 0.85));
-  const ask = round100(believed * rand(rng, 1.0, 1.4));
-  return { kind: 'sell', who: pick(rng, CUSTOMERS), item, min, ask: Math.max(ask, min), patience: 3 };
+  const min = round100(believed * (stolen ? rand(rng, 0.25, 0.4) : rand(rng, 0.55, 0.85)));
+  const ask = round100(believed * (stolen ? rand(rng, 0.4, 0.6) : rand(rng, 1.0, 1.4)));
+  // 돋보기로 보면 수상한 낌새가 보일 수 있어요: 장물이면 돋보기 정확도만큼, 보통 손님은 가끔 오해해요
+  const acc = LOUPE.accuracy[loupeLevel(state)];
+  const looksStolen = stolen ? rng() < acc : rng() < (1 - acc) * 0.3;
+  return { kind: 'sell', stolen, looksStolen, who: pick(rng, CUSTOMERS), item, min, ask: Math.max(ask, min), patience: 3 };
 }
 // 수집가: 원하는 물건이 재고에 있을 때만 생겨요. 처음 제안이 정상 시세의 2배
 export function makeCollector(rng, state) {
@@ -120,7 +124,31 @@ export function settlePledges(rng, s) {
   s.pledges = keep; return out;
 }
 
+// ---------- 장물과 경찰 ----------
+// 장물을 사면 하루나 이틀 뒤에 경찰이 와요. 그 전에 팔아 치우면 안전해요
+export function acquire(s, c, price, rng = Math.random) {
+  c.item.cost = price; s.cash -= price;
+  if (c.stolen) { c.item.stolen = true; c.item.policeDay = s.day + STOLEN.policeDelay[Math.floor(rng() * STOLEN.policeDelay.length)]; }
+  s.shelf.push(c.item);
+}
+export const dueStolen = (s) => s.shelf.filter((it) => it.stolen && it.policeDay <= s.day);
+export function makePolice(rng, state) {
+  const items = dueStolen(state); if (!items.length) return null;
+  return { kind: 'police', who: { ...pick(rng, CUSTOMERS), role: '경찰관' }, items, patience: 3 };
+}
+// 협조하면 장물만 넘기고 끝. 모른 척하면 40%는 넘어가고, 들키면 장물을 뺏기고 벌금까지 내요
+export function resolvePolice(rng, s, c, cooperate) {
+  const items = c.items.filter((it) => s.shelf.includes(it));
+  const value = items.reduce((a, it) => a + trueValue(it), 0);
+  const seize = () => { for (const it of items) s.shelf.splice(s.shelf.indexOf(it), 1); };
+  if (cooperate) { seize(); return { seized: items, fine: 0, escaped: false }; }
+  if (rng() < STOLEN.bluffChance) { for (const it of items) { it.stolen = false; } return { seized: [], fine: 0, escaped: true }; }
+  seize(); const fine = Math.min(s.cash, Math.max(STOLEN.minFine, round100(value * STOLEN.fineRate))); s.cash -= fine;
+  return { seized: items, fine, escaped: false };
+}
+
 export function makeCustomer(rng, state) {
+  if (state.day >= STOLEN.minDay && rng() < STOLEN.chance) return makeSeller(rng, state, true);
   if (state.day >= 2 && rng() < LOAN.chance) return makePawn(rng, state);
   if (rng() < 0.4) { const b = makeBuyer(rng, state); if (b) return b; }
   return makeSeller(rng, state);
@@ -136,11 +164,14 @@ export function makeDay(rng, state, count) {
     const c = makeCollector(rng, state);
     if (c) { let i; do { i = Math.floor(rng() * n); } while (list[i].kind === 'promo'); list[i] = c; }
   }
+  const po = makePolice(rng, state); // 장물을 산 지 하루 이틀이 지났으면 경찰이 와요
+  if (po) list.splice(Math.floor(rng() * (list.length + 1)), 0, po);
   return list;
 }
 // 손님 차례가 왔을 때 상황이 바뀌었을 수 있어요(물건을 이미 팔았거나 돈이 변함). 필요하면 다른 손님으로 바꿔 줘요.
 export function fixCustomer(rng, state, c) {
   if (c.kind === 'promo') { c.price = promoPrice(state); return c; }
+  if (c.kind === 'police') { const due = dueStolen(state); if (!due.length) return makeSeller(rng, state); c.items = due; return c; } // 그 사이 장물을 팔았으면 그냥 지나가요
   if (c.kind === 'buy' && !state.shelf.includes(c.item)) return (c.collector && makeCollector(rng, state)) || makeBuyer(rng, state) || makeSeller(rng, state);
   return c;
 }
