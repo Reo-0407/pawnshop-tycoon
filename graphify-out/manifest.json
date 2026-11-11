@@ -1,0 +1,92 @@
+{
+  "js/config.js": {
+    "mtime": 1794215909.081622,
+    "seen": 1794374107.7615309,
+    "ast_hash": "d24e04c7dc08750f66ca5415b5f3200b",
+    "semantic_hash": "d24e04c7dc08750f66ca5415b5f3200b"
+  },
+  "js/data.js": {
+    "mtime": 1794290103.5174916,
+    "seen": 1794374107.761535,
+    "ast_hash": "55a026e3ea6181fbe665005f6549f53f",
+    "semantic_hash": "55a026e3ea6181fbe665005f6549f53f"
+  },
+  "js/leaderboard.js": {
+    "mtime": 1794290133.8664808,
+    "seen": 1794374107.761537,
+    "ast_hash": "6530a1e556a1e7b51e1b060f0ea763e5",
+    "semantic_hash": "6530a1e556a1e7b51e1b060f0ea763e5"
+  },
+  "js/logic.js": {
+    "mtime": 1794290133.8967013,
+    "seen": 1794374107.7615378,
+    "ast_hash": "a4206e1aa3dbb085a16d741346d17868",
+    "semantic_hash": "a4206e1aa3dbb085a16d741346d17868"
+  },
+  "js/main.js": {
+    "mtime": 1794290133.9477415,
+    "seen": 1794374107.7615385,
+    "ast_hash": "6d57b35184b63323a88aa6dc80a4c0f3",
+    "semantic_hash": "6d57b35184b63323a88aa6dc80a4c0f3"
+  },
+  "js/sfx.js": {
+    "mtime": 1794290103.5195098,
+    "seen": 1794374107.7615392,
+    "ast_hash": "a4c2830215f355107a8b92ff036f5846",
+    "semantic_hash": "a4c2830215f355107a8b92ff036f5846"
+  },
+  "package.json": {
+    "mtime": 1794205848.054602,
+    "seen": 1794374107.7615402,
+    "ast_hash": "0209924a20de23601919c26068b8cfd1",
+    "semantic_hash": "0209924a20de23601919c26068b8cfd1"
+  },
+  "supabase.sql": {
+    "mtime": 1794214507.0231352,
+    "seen": 1794374107.761541,
+    "ast_hash": "a196ac94d906f5077cb159a378c8ed88",
+    "semantic_hash": "a196ac94d906f5077cb159a378c8ed88"
+  },
+  "tests/logic.test.mjs": {
+    "mtime": 1794290103.832928,
+    "seen": 1794374107.7615416,
+    "ast_hash": "67e247d57a2825a07333fc1e9a871fb4",
+    "semantic_hash": "67e247d57a2825a07333fc1e9a871fb4"
+  },
+  "tools/bump_version.py": {
+    "mtime": 1794221842.6439207,
+    "seen": 1794374107.761542,
+    "ast_hash": "05d0d26482b7f801ba048a125e89dcec",
+    "semantic_hash": "05d0d26482b7f801ba048a125e89dcec"
+  },
+  "tools/gen_images.py": {
+    "mtime": 1794218443.2846131,
+    "seen": 1794374107.7615428,
+    "ast_hash": "2bb54c7ce4879c0900f342b049ed4384",
+    "semantic_hash": "2bb54c7ce4879c0900f342b049ed4384"
+  },
+  "tools/postprocess.py": {
+    "mtime": 1794218443.2866106,
+    "seen": 1794374107.761544,
+    "ast_hash": "1245d50ba73ea2ac60bd67e5a70eb337",
+    "semantic_hash": "1245d50ba73ea2ac60bd67e5a70eb337"
+  },
+  "README.md": {
+    "mtime": 1794222070.3627396,
+    "seen": 1794374107.7615447,
+    "ast_hash": "a8eb0dc05c36ba2ec6245b6650be4e8c",
+    "semantic_hash": "a8eb0dc05c36ba2ec6245b6650be4e8c"
+  },
+  "docs/superpowers/specs/2026-11-09-pawnshop-tycoon-design.md": {
+    "mtime": 1794205714.378561,
+    "seen": 1794374107.7615457,
+    "ast_hash": "fc19513ffba3a996a2222419f9e56464",
+    "semantic_hash": "fc19513ffba3a996a2222419f9e56464"
+  },
+  "index.html": {
+    "mtime": 1794290133.8435385,
+    "seen": 1794374107.7615461,
+    "ast_hash": "9b7a9bac879dbea475fe7bddd834dbcf",
+    "semantic_hash": "9b7a9bac879dbea475fe7bddd834dbcf"
+  }
+}

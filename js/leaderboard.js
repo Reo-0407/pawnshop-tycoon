@@ -1,5 +1,5 @@
 // Supabase 리더보드 (config.js 가 비어 있으면 조용히 꺼짐)
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=14';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=15';
 
 export const boardEnabled = () => Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 // 새 형식 키(sb_publishable_...)는 JWT가 아니라서 apikey 헤더로만 보내요. 옛 형식(anon JWT)은 Authorization 도 같이.

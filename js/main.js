@@ -1,7 +1,7 @@
-import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=14';
-import * as G from './logic.js?v=14';
-import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=14';
-import { play, toggleMute, isMuted } from './sfx.js?v=14';
+import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=15';
+import * as G from './logic.js?v=15';
+import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=15';
+import { play, toggleMute, isMuted } from './sfx.js?v=15';
 
 const $ = (id) => document.getElementById(id);
 const won = (n) => `${Math.round(n).toLocaleString()}원`;
@@ -333,10 +333,18 @@ function renderUpgrades() {
 async function openBoard() {
   $('modal').hidden = false; const box = $('board');
   if (!boardEnabled()) { box.textContent = '순위표를 준비하는 중이에요. (Supabase 연결 전)'; return; }
-  box.textContent = '불러오는 중...'; const rows = await fetchTop(20);
+  box.textContent = '불러오는 중...'; const rows = await fetchTop(100); // shortcut: 100등 밖이면 내 순위를 못 찾아요, 사람이 많아지면 서버에서 순위를 세도록 바꿔요
   if (!rows) { box.textContent = '순위를 불러오지 못했어요.'; return; }
   box.innerHTML = rows.length ? '' : '아직 아무도 없어요. 첫 번째가 되어 보세요!';
-  rows.forEach((r, i) => { const d = document.createElement('div'); d.className = 'rank' + (S && r.nick === S.nick ? ' me' : ''); d.innerHTML = `<span>${i + 1}. </span><span style="flex:1;padding-left:6px"></span><span></span>`; d.children[1].textContent = `${r.nick} (${r.day}일)`; d.children[2].textContent = won(r.worth); box.append(d); });
+  const add = (r, i) => {
+    const d = document.createElement('div'); d.className = 'rank' + (S && r.nick === S.nick ? ' me' : '');
+    d.innerHTML = '<span></span><span style="flex:1;padding-left:6px"></span><span></span>';
+    d.children[0].textContent = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+    d.children[1].textContent = `${r.nick} (${r.day}일)${S && r.nick === S.nick ? ' ← 나' : ''}`; d.children[2].textContent = won(r.worth); box.append(d);
+  };
+  rows.slice(0, 20).forEach(add);
+  const mine = S ? rows.findIndex((r) => r.nick === S.nick) : -1;
+  if (mine >= 20) { const sep = document.createElement('div'); sep.className = 'small'; sep.textContent = '⋮'; box.append(sep); add(rows[mine], mine); }
 }
 
 // ---------- 시작 ----------
