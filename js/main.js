@@ -1,7 +1,7 @@
-import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=15';
-import * as G from './logic.js?v=15';
-import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=15';
-import { play, toggleMute, isMuted } from './sfx.js?v=15';
+import { TIERS, UPGRADES, RENT, PROMO, COLLECTOR_MULT, LOAN } from './data.js?v=16';
+import * as G from './logic.js?v=16';
+import { submitScore, fetchTop, boardEnabled } from './leaderboard.js?v=16';
+import { play, toggleMute, isMuted } from './sfx.js?v=16';
 
 const $ = (id) => document.getElementById(id);
 const won = (n) => `${Math.round(n).toLocaleString()}원`;
@@ -377,4 +377,5 @@ $('price').addEventListener('input', updatePreview);
 $('price').addEventListener('keydown', (e) => { if (e.key === 'Enter') onOffer(); });
 { const n = lastNick(); if (n) $('nickInput').value = n; }
 show('title');
-window.__pawn = { get S() { return S; } };
+// 시험용 입구는 주소에 ?dev 를 붙였을 때만 열어요. shortcut: 저장 데이터(localStorage)를 직접 고치는 건 못 막아요, 진짜 막으려면 서버가 게임을 계산해야 해요.
+if (new URLSearchParams(location.search).has('dev')) window.__pawn = { get S() { return S; } };

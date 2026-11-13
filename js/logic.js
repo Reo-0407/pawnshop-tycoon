@@ -1,5 +1,5 @@
 // 게임 규칙 (화면과 무관한 순수 함수). rng를 넘기면 테스트에서 고정할 수 있어요.
-import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, LOAN, STOLEN, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=15';
+import { ITEMS, CUSTOMERS, CATS, COLLECTORS, COLLECTOR_MULT, COLLECTOR_CHANCE, PROMO, LOAN, STOLEN, FAKE_CHANCE, LOUPE, LOUPE_USES, START_CASH, CUSTOMERS_PER_DAY, RENT, UPGRADES } from './data.js?v=16';
 
 const rand = (rng, a, b) => a + (b - a) * rng();
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
